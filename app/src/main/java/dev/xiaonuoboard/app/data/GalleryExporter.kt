@@ -55,11 +55,12 @@ class SoundFeedback(private val enabled: () -> Boolean) {
     private val tone: ToneGenerator? by lazy { runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 35) }.getOrNull() }
 
     fun fill() {
-        if (enabled()) tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 60)
+        if (enabled()) runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 60) }
     }
 
     fun cheer() {
-        if (enabled()) tone?.startTone(ToneGenerator.TONE_PROP_ACK, 200)
+        // runCatching: may race with release() (late async celebration after onDestroy).
+        if (enabled()) runCatching { tone?.startTone(ToneGenerator.TONE_PROP_ACK, 200) }
     }
 
     fun release() {

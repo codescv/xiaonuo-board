@@ -154,6 +154,54 @@ class CanvasPerfPathsTest {
     }
 
     @Test
+    fun clippedEdgeTilesOfNonMultipleCanvasCaptureAndUndoExactly() {
+        val w = 200 // 3×64 + 8
+        val h = 150 // 2×64 + 22
+        val rnd = Random(7)
+        val paint = IntArray(w * h) { rnd.nextInt() }
+        val original = paint.copyOf()
+        val undo = DirtyRectUndoStack(paint, w, h)
+        undo.beginAction()
+        // Bottom-right corner tile is only 8×22 px; also overshoot the canvas to exercise clamping.
+        undo.capture(192, 128, 260, 400)
+        assertEquals(1, undo.pendingTileCount)
+        for (y in 128 until 150) for (x in 192 until 200) paint[y * w + x] = red
+        // Right-edge column tiles (8 px wide) and bottom-row tiles (22 px tall) in the same action.
+        undo.capture(DirtyRect(195, 0, 200, 130))
+        undo.capture(DirtyRect(0, 140, 70, 150))
+        for (y in 0 until 130) for (x in 195 until 200) paint[y * w + x] = blue
+        for (y in 140 until 150) for (x in 0 until 70) paint[y * w + x] = blue
+        assertEquals(1 + 2 + 2, undo.pendingTileCount) // corner + 2 right-column + 2 bottom-row tiles
+        assertTrue(undo.commitAction())
+        val r = undo.undo()!!
+        assertArrayEquals(original, paint)
+        assertTrue(r.right == w && r.bottom == h)
+    }
+
+    @Test
+    fun fillTouchingCanvasEdgesBleedsAndUndoesExactly() {
+        val w = 70
+        val h = 50
+        // Lines touch all four borders; regions reach x=0, x=w-1, y=0, y=h-1.
+        val ink = TestArt.blank(w, h)
+        TestArt.vline(ink, w, 30, 0, h)
+        TestArt.hline(ink, w, 20, 0, w)
+        val map = RegionMapEngine.build(ink, w, h, closeRadius = 0)
+        for (id in 1..map.regionCount) {
+            val paint = IntArray(w * h)
+            val ref = IntArray(w * h)
+            val undo = DirtyRectUndoStack(paint, w, h)
+            undo.beginAction()
+            FloodFill.fill(map, id, red, paint, bleed = 1) { undo.capture(it) }
+            referenceFill(map, id, red, ref, bleed = 1)
+            assertArrayEquals("region $id", ref, paint)
+            assertTrue(undo.commitAction())
+            undo.undo()
+            assertTrue(paint.all { it == 0 })
+        }
+    }
+
+    @Test
     fun cancelledOrClearedActionsLeaveNoStaleTiles() {
         val w = 128
         val h = 128

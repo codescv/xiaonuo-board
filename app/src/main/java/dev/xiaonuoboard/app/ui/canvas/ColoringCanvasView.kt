@@ -161,10 +161,29 @@ class ColoringCanvasView(
 
     /** Releases the display tiles; call once the view has left the window. */
     fun release() {
+        // Disposed mid-stroke (e.g. Back while the pen is down): roll the stroke back and, above all,
+        // leave BOOX scribble mode so the EPD is never left owned by a dead view.
+        abortActiveStroke()
         controller.onDirty = null
         removeCallbacks(flushRefresh)
         refreshes.clear()
         paintLayer.release()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // Detached without a final ACTION_CANCEL: never stay stuck in stroking / scribble mode (that
+        // would also defer auto-saves forever). Tiles are kept so a re-attach can redraw.
+        abortActiveStroke()
+        removeCallbacks(flushRefresh)
+        refreshes.clear()
+    }
+
+    private fun abortActiveStroke() {
+        if (stroking || hwPreview) router.cancel()
+        stopHwPreview(0f, 0f, 0f, 0L, cancel = true)
+        stroking = false
+        strokeDirty = DirtyRect.EMPTY
     }
 
     /**
@@ -187,6 +206,9 @@ class ColoringCanvasView(
     }
 
     private fun flushPendingRefresh() {
+        // Belt and braces: never issue an EPD refresh while the hardware scribble layer owns the
+        // screen. startHwPreview() already folds pending work into strokeDirty, so nothing is lost.
+        if (hwPreview) return
         val batch = refreshes.drain() ?: return
         if (paintLayer.isReleased) return
         refreshCanvasRect(batch.rect, batch.mode)
@@ -269,7 +291,7 @@ class ColoringCanvasView(
                 // Deliver the rest of a stroke's samples immediately instead of batching them to vsync:
                 // up to one frame less input latency for the brush and the BOOX hardware pen trace.
                 // Rendering stays one upload + one refresh per frame thanks to the coalescing above.
-                if (router.mode == InputRouter.Mode.STROKE) requestUnbufferedDispatch(e)
+                if (router.mode == InputRouter.Mode.STROKE && router.activeId == e.getPointerId(i)) requestUnbufferedDispatch(e)
             }
             MotionEvent.ACTION_MOVE -> {
                 for (h in 0 until e.historySize) {
@@ -300,7 +322,15 @@ class ColoringCanvasView(
         val limit = Rect(screenLoc[0], screenLoc[1], screenLoc[0] + width, screenLoc[1] + height)
         hwPreview = OnyxEinkBridge.enterScribble(this, strokeWidthPx(), limit) &&
             OnyxEinkBridge.strokeStart(strokeWidthPx(), x + screenLoc[0], y + screenLoc[1], pressure, 1f, time)
-        if (!hwPreview) OnyxEinkBridge.leaveScribble(this)
+        if (!hwPreview) {
+            OnyxEinkBridge.leaveScribble(this)
+            return
+        }
+        // A refresh still queued for the next frame (e.g. the previous stroke's pen-up NORMAL refresh
+        // when strokes follow each other within one vsync) must not hit the EPD while scribble owns
+        // the screen: cancel it and fold it into this stroke's clean pen-up refresh instead.
+        removeCallbacks(flushRefresh)
+        refreshes.drain()?.let { strokeDirty = strokeDirty.union(it.rect) }
     }
 
     private fun stopHwPreview(x: Float, y: Float, pressure: Float, time: Long, cancel: Boolean) {

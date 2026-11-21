@@ -128,6 +128,8 @@ fun CanvasScreen(
     var confirmReset by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var celebrated by remember { mutableStateOf(false) }
+    /** Bumped on 清空 so an in-flight save's celebration from before the reset is dropped. */
+    var resetCount by remember { mutableIntStateOf(0) }
     val saveTicks = remember { MutableStateFlow(0) }
     /** An auto-save fired mid-stroke; it is re-queued as soon as that stroke ends. */
     val saveDeferred = remember { AtomicBoolean(false) }
@@ -162,11 +164,14 @@ fun CanvasScreen(
             if (notifyNav) onArtworkCreated(it)
         }
         val mayCelebrate = notifyNav && !celebrated
+        val resetsAtSnapshot = resetCount
         return ioJobs.track(container.appScope.launch {
             val progress = controller.progress(pixels)
             if (mayCelebrate && progress >= 0.9f) {
                 withContext(Dispatchers.Main) {
-                    if (!celebrated) {
+                    // The save outlives the screen: only celebrate if this canvas is still showing and
+                    // the page was not cleared since the snapshot.
+                    if (!celebrated && !view.isReleased && resetCount == resetsAtSnapshot) {
                         celebrated = true
                         message = "🎉 太棒啦！这幅画快涂完啦！"
                         container.sound.cheer()
@@ -308,7 +313,7 @@ fun CanvasScreen(
             }
             if (confirmReset) {
                 EinkButton("确认清空?", Modifier.fillMaxHeight(), selected = true, fontSize = 15, minHeight = 48.dp) {
-                    controller.reset(); confirmReset = false; celebrated = false
+                    controller.reset(); confirmReset = false; celebrated = false; resetCount++
                 }
             } else {
                 EinkIconButton(Modifier.width(64.dp).fillMaxHeight(), minHeight = 48.dp, onClick = { confirmReset = true }) { tint ->
