@@ -90,6 +90,40 @@ fun Modifier.einkClick(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     return this.clickable(interactionSource = src, indication = null as Indication?, enabled = enabled, onClick = onClick)
 }
 
+/** High-contrast E-Ink icon-only button for kids: 2dp ink border, ≥56dp, inverted when [selected]. */
+@Composable
+fun EinkIconButton(
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    minHeight: Dp = Eink.Touch,
+    shape: Shape = Eink.Shape,
+    onClick: () -> Unit,
+    icon: @Composable (tint: Color) -> Unit,
+) {
+    val bg = when {
+        !enabled -> Eink.Paper
+        selected -> Eink.Ink
+        else -> Eink.White
+    }
+    val fg = when {
+        !enabled -> Eink.Muted
+        selected -> Eink.White
+        else -> Eink.Ink
+    }
+    Box(
+        modifier
+            .defaultMinSize(minWidth = minHeight, minHeight = minHeight)
+            .background(bg, shape)
+            .border(Eink.Border, if (enabled) Eink.Ink else Eink.Muted, shape)
+            .einkClick(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        icon(fg)
+    }
+}
+
 /** High-contrast E-Ink button: 2dp ink border, ≥56dp, inverted when [selected]. */
 @Composable
 fun EinkButton(

@@ -203,74 +203,91 @@ fun CanvasScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // ── Top toolbar (56dp) ──
+        // ── Top toolbar (68dp, big custom vector icons for kids — zero text, zero emoji) ──
         Row(
-            Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val m = Modifier.weight(1f).fillMaxHeight()
-            EinkButton("← 返回", m, fontSize = 15) { onBack() }
-            EinkButton("🪣 填色", m, selected = tool == Tool.FILL, fontSize = 15) { tool = Tool.FILL }
-            EinkButton("🖍️ 蜡笔", m, selected = tool == Tool.CRAYON, fontSize = 15) { tool = Tool.CRAYON }
-            EinkButton("🧹 橡皮", m, selected = tool == Tool.ERASER, fontSize = 15) { tool = Tool.ERASER }
-            EinkButton("🔒 不出线", m, selected = stayInside, fontSize = 15) {
-                stayInside = !stayInside
-                container.settings.update { it.copy(stayInsideLines = stayInside) }
-            }
-            EinkButton("↩️ 撤销", m, fontSize = 15) {
-                if (controller.undo() == null) message = "没有可以撤销的步骤啦"
-            }
-            EinkButton(if (ghostHint) "✨ 清残影!" else "✨ 清残影", m, selected = ghostHint, fontSize = 15) {
-                canvasView?.clearGhosting(); ghostHint = false
-            }
-            EinkButton("💾 导出", m, fontSize = 15) {
-                val view = canvasView ?: return@EinkButton
-                saveNow()
-                val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                message = "正在导出高清 PNG…"
-                ioJobs.track(container.appScope.launch {
-                    val result = run {
-                        var out: Bitmap? = null
-                        try {
-                            out = BitmapIO.composite(snapshot, s.lineOverlay)
-                            val where = GalleryExporter.exportPng(context, out, "${s.page.title}_${System.currentTimeMillis()}")
-                            currentArtworkId?.let { container.artworks.markExported(it) }
-                            "✓ 已保存到相册 $where"
-                        } catch (e: Exception) {
-                            "导出失败：${e.message}"
-                        } finally {
-                            out?.recycle()
-                            snapshot.recycle()
-                        }
-                    }
-                    withContext(Dispatchers.Main) { message = result }
-                })
-            }
-        }
-        // ── Secondary row: brush size / zoom / reset ──
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 6.dp, vertical = 2.dp),
+            Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (tool == Tool.FILL) "点一下色块就能填色" else "粗细：", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            val m = Modifier.weight(1f).fillMaxHeight()
+            EinkIconButton(m, onClick = onBack) { tint -> KidIcons.BackArrow(tint) }
+            EinkIconButton(m, selected = tool == Tool.CRAYON, onClick = { tool = Tool.CRAYON }) { tint -> KidIcons.Crayon(tint) }
+            EinkIconButton(m, selected = tool == Tool.FILL, onClick = { tool = Tool.FILL }) { tint -> KidIcons.PaintBucket(tint) }
+            EinkIconButton(m, selected = tool == Tool.ERASER, onClick = { tool = Tool.ERASER }) { tint -> KidIcons.Eraser(tint) }
+            EinkIconButton(
+                m,
+                selected = stayInside,
+                onClick = {
+                    stayInside = !stayInside
+                    container.settings.update { it.copy(stayInsideLines = stayInside) }
+                },
+            ) { tint -> KidIcons.ClipLock(stayInside, tint) }
+            EinkIconButton(
+                m,
+                onClick = { if (controller.undo() == null) message = "没有可以撤销的步骤啦" },
+            ) { tint -> KidIcons.Undo(tint) }
+            EinkIconButton(
+                m,
+                selected = ghostHint,
+                onClick = { canvasView?.clearGhosting(); ghostHint = false },
+            ) { tint -> KidIcons.SparkleRefresh(tint) }
+            EinkIconButton(
+                m,
+                onClick = {
+                    val view = canvasView ?: return@EinkIconButton
+                    saveNow()
+                    val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    message = "正在导出高清 PNG…"
+                    ioJobs.track(container.appScope.launch {
+                        val result = run {
+                            var out: Bitmap? = null
+                            try {
+                                out = BitmapIO.composite(snapshot, s.lineOverlay)
+                                val where = GalleryExporter.exportPng(context, out, "${s.page.title}_${System.currentTimeMillis()}")
+                                currentArtworkId?.let { container.artworks.markExported(it) }
+                                "✓ 已保存到相册 $where"
+                            } catch (e: Exception) {
+                                "导出失败：${e.message}"
+                            } finally {
+                                out?.recycle()
+                                snapshot.recycle()
+                            }
+                        }
+                        withContext(Dispatchers.Main) { message = result }
+                    })
+                },
+            ) { tint -> KidIcons.SaveExport(tint) }
+        }
+        // ── Secondary row: proportional brush size dots (no text) / zoom reset / reset page ──
+        Row(
+            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 6.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (tool != Tool.FILL) {
-                BrushSize.entries.forEach { b ->
-                    EinkButton(b.label, Modifier.width(64.dp).fillMaxHeight(), selected = brush == b, fontSize = 16) { brush = b }
+                val dotSizes = listOf(BrushSize.THIN to 11.dp, BrushSize.MEDIUM to 19.dp, BrushSize.THICK to 27.dp)
+                dotSizes.forEach { (b, dp) ->
+                    EinkIconButton(
+                        Modifier.width(64.dp).fillMaxHeight(),
+                        selected = brush == b,
+                        minHeight = 48.dp,
+                        onClick = { brush = b },
+                    ) { tint -> KidIcons.BrushDot(dp, tint, b.label) }
                 }
             }
             Spacer(Modifier.weight(1f))
             if (zoom > 1.01f) {
-                EinkButton("🔍 ${"%.1f".format(zoom)}× 复位", Modifier.fillMaxHeight(), fontSize = 15) { canvasView?.resetZoom() }
-            } else {
-                Text("双指缩放 1–3×", fontSize = 14.sp, color = Eink.Muted)
+                EinkButton("${"%.1f".format(zoom)}×", Modifier.fillMaxHeight(), fontSize = 15, minHeight = 48.dp) {
+                    canvasView?.resetZoom()
+                }
             }
-            EinkButton(if (confirmReset) "确认重置?" else "🔄 重置", Modifier.fillMaxHeight(), selected = confirmReset, fontSize = 15) {
-                if (confirmReset) {
+            if (confirmReset) {
+                EinkButton("确认清空?", Modifier.fillMaxHeight(), selected = true, fontSize = 15, minHeight = 48.dp) {
                     controller.reset(); confirmReset = false; celebrated = false
-                } else {
-                    confirmReset = true
+                }
+            } else {
+                EinkIconButton(Modifier.width(64.dp).fillMaxHeight(), minHeight = 48.dp, onClick = { confirmReset = true }) { tint ->
+                    KidIcons.ResetPage(tint)
                 }
             }
         }
@@ -294,7 +311,9 @@ fun CanvasScreen(
             if (s.refThumb != null) {
                 val pipModifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
                 when {
-                    pipCollapsed -> EinkButton("🖼️ 看参考图", pipModifier, fontSize = 15) { pipCollapsed = false }
+                    pipCollapsed -> EinkIconButton(pipModifier, onClick = { pipCollapsed = false }) { tint ->
+                        KidIcons.RefPicture(tint)
+                    }
                     pipExpanded -> Column(
                         Modifier.align(Alignment.Center).fillMaxWidth(0.86f)
                             .background(Eink.White, Eink.Shape).border(3.dp, Eink.Ink, Eink.Shape).padding(8.dp),
@@ -312,15 +331,23 @@ fun CanvasScreen(
                         pipModifier.width(170.dp).background(Eink.White, Eink.Shape).border(Eink.Border, Eink.Ink, Eink.Shape).padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("参考图(点吸色)", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                         RefImage(s.refThumb, Modifier.fillMaxWidth().aspectRatio(0.75f)) { fx, fy -> pickFromRef(fx, fy) }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            EinkButton("⤢", Modifier.weight(1f), fontSize = 15, minHeight = 44.dp) { pipExpanded = true }
-                            EinkButton("👁️", Modifier.weight(1f), selected = ghost, fontSize = 15, minHeight = 44.dp) {
-                                ghost = !ghost
-                                container.settings.update { it.copy(ghostUnderlay = ghost) }
+                            EinkIconButton(Modifier.weight(1f), minHeight = 44.dp, onClick = { pipExpanded = true }) { tint ->
+                                KidIcons.Expand(tint)
                             }
-                            EinkButton("收起", Modifier.weight(1f), fontSize = 13, minHeight = 44.dp) { pipCollapsed = true }
+                            EinkIconButton(
+                                Modifier.weight(1f),
+                                selected = ghost,
+                                minHeight = 44.dp,
+                                onClick = {
+                                    ghost = !ghost
+                                    container.settings.update { it.copy(ghostUnderlay = ghost) }
+                                },
+                            ) { tint -> KidIcons.Eye(ghost, tint) }
+                            EinkIconButton(Modifier.weight(1f), minHeight = 44.dp, onClick = { pipCollapsed = true }) { tint ->
+                                KidIcons.Collapse(tint)
+                            }
                         }
                     }
                 }
@@ -339,11 +366,15 @@ fun CanvasScreen(
                 val rec = s.recommended.take(6)
                 rec.forEach { c -> ColorDot(c, selected = c == color, modifier = Modifier.weight(1f)) { color = c } }
                 repeat(6 - rec.size) { Spacer(Modifier.weight(1f)) }
-                EinkButton(if (stylusOnly) "✍️ 仅笔" else "👆 手笔", Modifier.width(104.dp), selected = stylusOnly, fontSize = 15) {
-                    stylusOnly = !stylusOnly
-                    container.settings.update { it.copy(stylusOnly = stylusOnly) }
-                    message = if (stylusOnly) "仅笔作画(防误触)：手指只能缩放和拖动" else "手笔皆可涂色"
-                }
+                EinkIconButton(
+                    Modifier.width(72.dp),
+                    selected = stylusOnly,
+                    onClick = {
+                        stylusOnly = !stylusOnly
+                        container.settings.update { it.copy(stylusOnly = stylusOnly) }
+                        message = if (stylusOnly) "仅笔作画(防误触)：手指只能缩放和拖动" else "手笔皆可涂色"
+                    },
+                ) { tint -> KidIcons.StylusMode(stylusOnly, tint) }
             }
             KaleidoPalette.CRAYONS.chunked(8).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

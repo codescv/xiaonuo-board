@@ -35,7 +35,7 @@ class ColoringCanvasController(
     val undoStack = DirtyRectUndoStack(paint, width, height)
     private val brush = CrayonBrush(regionMap, paint)
 
-    var tool: Tool = Tool.FILL
+    var tool: Tool = Tool.CRAYON
     var brushSize: BrushSize = BrushSize.MEDIUM
     var color: Int = KaleidoPalette.CRAYONS.first().argb
     /** 「不涂出线」: clip crayon/eraser strokes to the region under pen-down. */
