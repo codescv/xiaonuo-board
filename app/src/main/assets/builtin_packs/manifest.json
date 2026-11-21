@@ -1,0 +1,1219 @@
+{
+ "version": 1,
+ "canvas": {
+  "width": 1200,
+  "height": 1600
+ },
+ "categories": [
+  {
+   "id": "elsa",
+   "title": "艾莎"
+  },
+  {
+   "id": "bluey",
+   "title": "布鲁伊"
+  },
+  {
+   "id": "peppa",
+   "title": "小猪佩奇"
+  },
+  {
+   "id": "anpanman",
+   "title": "面包超人"
+  },
+  {
+   "id": "alphabet",
+   "title": "字母"
+  }
+ ],
+ "pages": [
+  {
+   "id": "elsa_01",
+   "category": "elsa",
+   "index": 1,
+   "title": "闪亮大雪花",
+   "difficulty": "easy",
+   "line": "elsa/elsa_01_line.png",
+   "ref": "elsa/elsa_01_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#BDEBFA",
+    "#DCEFFF",
+    "#00B4D8",
+    "#0077B6",
+    "#9D4EDD",
+    "#E3CCFF"
+   ]
+  },
+  {
+   "id": "elsa_02",
+   "category": "elsa",
+   "index": 2,
+   "title": "冰雪小皇冠",
+   "difficulty": "easy",
+   "line": "elsa/elsa_02_line.png",
+   "ref": "elsa/elsa_02_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#FF70A6",
+    "#BDEBFA",
+    "#0077B6",
+    "#00B4D8",
+    "#9D4EDD",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "elsa_03",
+   "category": "elsa",
+   "index": 3,
+   "title": "雪人朋友",
+   "difficulty": "easy",
+   "line": "elsa/elsa_03_line.png",
+   "ref": "elsa/elsa_03_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#BDEBFA",
+    "#2400FF",
+    "#E61919",
+    "#FF6F00",
+    "#FFD600",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "elsa_04",
+   "category": "elsa",
+   "index": 4,
+   "title": "冰晶城堡",
+   "difficulty": "easy",
+   "line": "elsa/elsa_04_line.png",
+   "ref": "elsa/elsa_04_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#DCEFFF",
+    "#00B4D8",
+    "#9D4EDD",
+    "#0077B6",
+    "#FFD600",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "elsa_05",
+   "category": "elsa",
+   "index": 5,
+   "title": "雪橇滑雪啦",
+   "difficulty": "easy",
+   "line": "elsa/elsa_05_line.png",
+   "ref": "elsa/elsa_05_ref.webp",
+   "regions": 18,
+   "palette": [
+    "#DCEFFF",
+    "#007F5F",
+    "#FFD600",
+    "#E61919",
+    "#2400FF",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "elsa_06",
+   "category": "elsa",
+   "index": 6,
+   "title": "冰屋与小企鹅",
+   "difficulty": "standard",
+   "line": "elsa/elsa_06_line.png",
+   "ref": "elsa/elsa_06_ref.webp",
+   "regions": 49,
+   "palette": [
+    "#BDEBFA",
+    "#DCEFFF",
+    "#00B4D8",
+    "#1B3A8C",
+    "#FFD600",
+    "#0077B6"
+   ]
+  },
+  {
+   "id": "elsa_07",
+   "category": "elsa",
+   "index": 7,
+   "title": "冰雪城堡全景",
+   "difficulty": "standard",
+   "line": "elsa/elsa_07_line.png",
+   "ref": "elsa/elsa_07_ref.webp",
+   "regions": 50,
+   "palette": [
+    "#BDEBFA",
+    "#DCEFFF",
+    "#00B4D8",
+    "#9D4EDD",
+    "#0077B6",
+    "#007F5F"
+   ]
+  },
+  {
+   "id": "elsa_08",
+   "category": "elsa",
+   "index": 8,
+   "title": "冬日森林小屋",
+   "difficulty": "standard",
+   "line": "elsa/elsa_08_line.png",
+   "ref": "elsa/elsa_08_ref.webp",
+   "regions": 56,
+   "palette": [
+    "#E3CCFF",
+    "#007F5F",
+    "#E0A96D",
+    "#E61919",
+    "#A45A2A",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "elsa_09",
+   "category": "elsa",
+   "index": 9,
+   "title": "雪人一家",
+   "difficulty": "standard",
+   "line": "elsa/elsa_09_line.png",
+   "ref": "elsa/elsa_09_ref.webp",
+   "regions": 37,
+   "palette": [
+    "#BDEBFA",
+    "#FFD600",
+    "#2400FF",
+    "#E61919",
+    "#9D4EDD",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "elsa_10",
+   "category": "elsa",
+   "index": 10,
+   "title": "冰雪森林极光夜",
+   "difficulty": "standard",
+   "line": "elsa/elsa_10_line.png",
+   "ref": "elsa/elsa_10_ref.webp",
+   "regions": 48,
+   "palette": [
+    "#0077B6",
+    "#BDEBFA",
+    "#007F5F",
+    "#00B4D8",
+    "#38B000",
+    "#9D4EDD"
+   ]
+  },
+  {
+   "id": "bluey_01",
+   "category": "bluey",
+   "index": 1,
+   "title": "红色大气球",
+   "difficulty": "easy",
+   "line": "bluey/bluey_01_line.png",
+   "ref": "bluey/bluey_01_ref.webp",
+   "regions": 11,
+   "palette": [
+    "#B6F09C",
+    "#E61919",
+    "#FFD600",
+    "#2400FF",
+    "#FF70A6",
+    "#FF006E"
+   ]
+  },
+  {
+   "id": "bluey_02",
+   "category": "bluey",
+   "index": 2,
+   "title": "飞呀风筝",
+   "difficulty": "easy",
+   "line": "bluey/bluey_02_line.png",
+   "ref": "bluey/bluey_02_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#B6F09C",
+    "#00B4D8",
+    "#FF6F00",
+    "#FFD600",
+    "#E61919",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "bluey_03",
+   "category": "bluey",
+   "index": 3,
+   "title": "神奇魔术帽",
+   "difficulty": "easy",
+   "line": "bluey/bluey_03_line.png",
+   "ref": "bluey/bluey_03_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#9D4EDD",
+    "#E61919",
+    "#1B3A8C",
+    "#FFD600",
+    "#FF6F00",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "bluey_04",
+   "category": "bluey",
+   "index": 4,
+   "title": "冰淇淋圣代",
+   "difficulty": "easy",
+   "line": "bluey/bluey_04_line.png",
+   "ref": "bluey/bluey_04_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#BDEBFA",
+    "#00B4D8",
+    "#FF70A6",
+    "#A45A2A",
+    "#FFF1A1",
+    "#E0A96D"
+   ]
+  },
+  {
+   "id": "bluey_05",
+   "category": "bluey",
+   "index": 5,
+   "title": "沙滩小水桶",
+   "difficulty": "easy",
+   "line": "bluey/bluey_05_line.png",
+   "ref": "bluey/bluey_05_ref.webp",
+   "regions": 18,
+   "palette": [
+    "#BDEBFA",
+    "#F7D99B",
+    "#00B4D8",
+    "#E61919",
+    "#FFD600",
+    "#2400FF"
+   ]
+  },
+  {
+   "id": "bluey_06",
+   "category": "bluey",
+   "index": 6,
+   "title": "后院大树秋千",
+   "difficulty": "standard",
+   "line": "bluey/bluey_06_line.png",
+   "ref": "bluey/bluey_06_ref.webp",
+   "regions": 51,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#38B000",
+    "#E0A96D",
+    "#A45A2A",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "bluey_07",
+   "category": "bluey",
+   "index": 7,
+   "title": "草地野餐",
+   "difficulty": "standard",
+   "line": "bluey/bluey_07_line.png",
+   "ref": "bluey/bluey_07_ref.webp",
+   "regions": 37,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#E61919",
+    "#38B000",
+    "#E0A96D",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "bluey_08",
+   "category": "bluey",
+   "index": 8,
+   "title": "海滩堆沙堡",
+   "difficulty": "standard",
+   "line": "bluey/bluey_08_line.png",
+   "ref": "bluey/bluey_08_ref.webp",
+   "regions": 30,
+   "palette": [
+    "#BDEBFA",
+    "#F7D99B",
+    "#00B4D8",
+    "#E0A96D",
+    "#E61919",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "bluey_09",
+   "category": "bluey",
+   "index": 9,
+   "title": "客厅气球派对",
+   "difficulty": "standard",
+   "line": "bluey/bluey_09_line.png",
+   "ref": "bluey/bluey_09_ref.webp",
+   "regions": 39,
+   "palette": [
+    "#FFF1A1",
+    "#E0A96D",
+    "#E61919",
+    "#BDEBFA",
+    "#FF70A6",
+    "#9D4EDD"
+   ]
+  },
+  {
+   "id": "bluey_10",
+   "category": "bluey",
+   "index": 10,
+   "title": "后院滑梯和沙池",
+   "difficulty": "standard",
+   "line": "bluey/bluey_10_line.png",
+   "ref": "bluey/bluey_10_ref.webp",
+   "regions": 46,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#2400FF",
+    "#FFD600",
+    "#F7D99B",
+    "#A45A2A"
+   ]
+  },
+  {
+   "id": "peppa_01",
+   "category": "peppa",
+   "index": 1,
+   "title": "雨靴跳泥坑",
+   "difficulty": "easy",
+   "line": "peppa/peppa_01_line.png",
+   "ref": "peppa/peppa_01_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#E61919",
+    "#A45A2A",
+    "#D5DBE5",
+    "#FFD600",
+    "#1B3A8C",
+    "#00B4D8"
+   ]
+  },
+  {
+   "id": "peppa_02",
+   "category": "peppa",
+   "index": 2,
+   "title": "小雨伞",
+   "difficulty": "easy",
+   "line": "peppa/peppa_02_line.png",
+   "ref": "peppa/peppa_02_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#BDEBFA",
+    "#00B4D8",
+    "#38B000",
+    "#9D4EDD",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "peppa_03",
+   "category": "peppa",
+   "index": 3,
+   "title": "滑板车",
+   "difficulty": "easy",
+   "line": "peppa/peppa_03_line.png",
+   "ref": "peppa/peppa_03_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#B6F09C",
+    "#1B3A8C",
+    "#E61919",
+    "#FFD600",
+    "#D5DBE5",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "peppa_04",
+   "category": "peppa",
+   "index": 4,
+   "title": "生日蛋糕",
+   "difficulty": "easy",
+   "line": "peppa/peppa_04_line.png",
+   "ref": "peppa/peppa_04_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#FF70A6",
+    "#FFF1A1",
+    "#BDEBFA",
+    "#E61919",
+    "#FF6F00",
+    "#9D4EDD"
+   ]
+  },
+  {
+   "id": "peppa_05",
+   "category": "peppa",
+   "index": 5,
+   "title": "红色小汽车",
+   "difficulty": "easy",
+   "line": "peppa/peppa_05_line.png",
+   "ref": "peppa/peppa_05_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#B6F09C",
+    "#D5DBE5",
+    "#E61919",
+    "#1B3A8C",
+    "#BDEBFA",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "peppa_06",
+   "category": "peppa",
+   "index": 6,
+   "title": "茶话会",
+   "difficulty": "standard",
+   "line": "peppa/peppa_06_line.png",
+   "ref": "peppa/peppa_06_ref.webp",
+   "regions": 39,
+   "palette": [
+    "#FFF1A1",
+    "#E0A96D",
+    "#FF70A6",
+    "#9D4EDD",
+    "#FF006E",
+    "#00B4D8"
+   ]
+  },
+  {
+   "id": "peppa_07",
+   "category": "peppa",
+   "index": 7,
+   "title": "菜园和小火车",
+   "difficulty": "standard",
+   "line": "peppa/peppa_07_line.png",
+   "ref": "peppa/peppa_07_ref.webp",
+   "regions": 57,
+   "palette": [
+    "#BDEBFA",
+    "#A45A2A",
+    "#B6F09C",
+    "#FF6F00",
+    "#38B000",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "peppa_08",
+   "category": "peppa",
+   "index": 8,
+   "title": "热气球飞上天",
+   "difficulty": "standard",
+   "line": "peppa/peppa_08_line.png",
+   "ref": "peppa/peppa_08_ref.webp",
+   "regions": 48,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#38B000",
+    "#E61919",
+    "#FFD600",
+    "#00B4D8"
+   ]
+  },
+  {
+   "id": "peppa_09",
+   "category": "peppa",
+   "index": 9,
+   "title": "海边度假",
+   "difficulty": "standard",
+   "line": "peppa/peppa_09_line.png",
+   "ref": "peppa/peppa_09_ref.webp",
+   "regions": 36,
+   "palette": [
+    "#F7D99B",
+    "#BDEBFA",
+    "#00B4D8",
+    "#FFD600",
+    "#E61919",
+    "#2400FF"
+   ]
+  },
+  {
+   "id": "peppa_10",
+   "category": "peppa",
+   "index": 10,
+   "title": "雨后彩虹泥坑",
+   "difficulty": "standard",
+   "line": "peppa/peppa_10_line.png",
+   "ref": "peppa/peppa_10_ref.webp",
+   "regions": 42,
+   "palette": [
+    "#B6F09C",
+    "#BDEBFA",
+    "#FFD600",
+    "#E61919",
+    "#38B000",
+    "#A45A2A"
+   ]
+  },
+  {
+   "id": "anpanman_01",
+   "category": "anpanman",
+   "index": 1,
+   "title": "香喷喷面包",
+   "difficulty": "easy",
+   "line": "anpanman/anpanman_01_line.png",
+   "ref": "anpanman/anpanman_01_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#E0A96D",
+    "#A45A2A",
+    "#FFF1A1",
+    "#BDEBFA",
+    "#FFD600",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "anpanman_02",
+   "category": "anpanman",
+   "index": 2,
+   "title": "吐司片",
+   "difficulty": "easy",
+   "line": "anpanman/anpanman_02_line.png",
+   "ref": "anpanman/anpanman_02_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#FFF1A1",
+    "#A45A2A",
+    "#FF70A6",
+    "#E61919",
+    "#BDEBFA",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "anpanman_03",
+   "category": "anpanman",
+   "index": 3,
+   "title": "牛角面包",
+   "difficulty": "easy",
+   "line": "anpanman/anpanman_03_line.png",
+   "ref": "anpanman/anpanman_03_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#E0A96D",
+    "#BDEBFA",
+    "#FFC285",
+    "#FF70A6",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "anpanman_04",
+   "category": "anpanman",
+   "index": 4,
+   "title": "纸杯蛋糕",
+   "difficulty": "easy",
+   "line": "anpanman/anpanman_04_line.png",
+   "ref": "anpanman/anpanman_04_ref.webp",
+   "regions": 12,
+   "palette": [
+    "#FF70A6",
+    "#00B4D8",
+    "#BDEBFA",
+    "#E61919",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "anpanman_05",
+   "category": "anpanman",
+   "index": 5,
+   "title": "飞碟",
+   "difficulty": "easy",
+   "line": "anpanman/anpanman_05_line.png",
+   "ref": "anpanman/anpanman_05_ref.webp",
+   "regions": 18,
+   "palette": [
+    "#FFF1A1",
+    "#9D4EDD",
+    "#E3CCFF",
+    "#BDEBFA",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "anpanman_06",
+   "category": "anpanman",
+   "index": 6,
+   "title": "面包工厂",
+   "difficulty": "standard",
+   "line": "anpanman/anpanman_06_line.png",
+   "ref": "anpanman/anpanman_06_ref.webp",
+   "regions": 47,
+   "palette": [
+    "#BDEBFA",
+    "#D5DBE5",
+    "#FFB58A",
+    "#E61919",
+    "#A45A2A",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "anpanman_07",
+   "category": "anpanman",
+   "index": 7,
+   "title": "彩虹下的小镇",
+   "difficulty": "standard",
+   "line": "anpanman/anpanman_07_line.png",
+   "ref": "anpanman/anpanman_07_ref.webp",
+   "regions": 43,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#E61919",
+    "#38B000",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "anpanman_08",
+   "category": "anpanman",
+   "index": 8,
+   "title": "野餐篮",
+   "difficulty": "standard",
+   "line": "anpanman/anpanman_08_line.png",
+   "ref": "anpanman/anpanman_08_ref.webp",
+   "regions": 54,
+   "palette": [
+    "#B6F09C",
+    "#E0A96D",
+    "#2400FF",
+    "#A45A2A",
+    "#E61919",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "anpanman_09",
+   "category": "anpanman",
+   "index": 9,
+   "title": "面包店橱窗",
+   "difficulty": "standard",
+   "line": "anpanman/anpanman_09_line.png",
+   "ref": "anpanman/anpanman_09_ref.webp",
+   "regions": 55,
+   "palette": [
+    "#FFC285",
+    "#FFF1A1",
+    "#A45A2A",
+    "#E0A96D",
+    "#FF70A6",
+    "#00B4D8"
+   ]
+  },
+  {
+   "id": "anpanman_10",
+   "category": "anpanman",
+   "index": 10,
+   "title": "小飞机巡逻",
+   "difficulty": "standard",
+   "line": "anpanman/anpanman_10_line.png",
+   "ref": "anpanman/anpanman_10_ref.webp",
+   "regions": 37,
+   "palette": [
+    "#BDEBFA",
+    "#B6F09C",
+    "#D5DBE5",
+    "#E61919",
+    "#2400FF",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_01",
+   "category": "alphabet",
+   "index": 1,
+   "title": "Aa 苹果 Apple",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_01_line.png",
+   "ref": "alphabet/alphabet_01_ref.webp",
+   "regions": 12,
+   "palette": [
+    "#E61919",
+    "#38B000",
+    "#BDEBFA",
+    "#A45A2A",
+    "#FFD600",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "alphabet_02",
+   "category": "alphabet",
+   "index": 2,
+   "title": "Bb 小熊 Bear",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_02_line.png",
+   "ref": "alphabet/alphabet_02_ref.webp",
+   "regions": 18,
+   "palette": [
+    "#A45A2A",
+    "#FF6F00",
+    "#E0A96D",
+    "#E61919",
+    "#FFB58A",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_03",
+   "category": "alphabet",
+   "index": 3,
+   "title": "Cc 小猫 Cat",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_03_line.png",
+   "ref": "alphabet/alphabet_03_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#8D99AE",
+    "#FF6F00",
+    "#9D4EDD",
+    "#FF70A6",
+    "#E61919",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_04",
+   "category": "alphabet",
+   "index": 4,
+   "title": "Dd 小狗 Dog",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_04_line.png",
+   "ref": "alphabet/alphabet_04_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#A45A2A",
+    "#00B4D8",
+    "#E0A96D",
+    "#2400FF",
+    "#FFD600",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "alphabet_05",
+   "category": "alphabet",
+   "index": 5,
+   "title": "Ee 彩蛋 Egg",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_05_line.png",
+   "ref": "alphabet/alphabet_05_ref.webp",
+   "regions": 13,
+   "palette": [
+    "#38B000",
+    "#FF70A6",
+    "#FFF1A1",
+    "#FF6F00",
+    "#00B4D8",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "alphabet_06",
+   "category": "alphabet",
+   "index": 6,
+   "title": "Ff 小鱼 Fish",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_06_line.png",
+   "ref": "alphabet/alphabet_06_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#FF6F00",
+    "#2400FF",
+    "#FFD600",
+    "#BDEBFA",
+    "#FF006E",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "alphabet_07",
+   "category": "alphabet",
+   "index": 7,
+   "title": "Gg 葡萄 Grapes",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_07_line.png",
+   "ref": "alphabet/alphabet_07_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#9D4EDD",
+    "#38B000",
+    "#FF006E",
+    "#A45A2A",
+    "#E61919",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "alphabet_08",
+   "category": "alphabet",
+   "index": 8,
+   "title": "Hh 房子 House",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_08_line.png",
+   "ref": "alphabet/alphabet_08_ref.webp",
+   "regions": 13,
+   "palette": [
+    "#B6F09C",
+    "#E61919",
+    "#2400FF",
+    "#FFD600",
+    "#A45A2A",
+    "#BDEBFA"
+   ]
+  },
+  {
+   "id": "alphabet_09",
+   "category": "alphabet",
+   "index": 9,
+   "title": "Ii 冰淇淋 Ice cream",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_09_line.png",
+   "ref": "alphabet/alphabet_09_ref.webp",
+   "regions": 11,
+   "palette": [
+    "#FF70A6",
+    "#00B4D8",
+    "#FFF1A1",
+    "#E0A96D",
+    "#E61919",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "alphabet_10",
+   "category": "alphabet",
+   "index": 10,
+   "title": "Jj 水母 Jellyfish",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_10_line.png",
+   "ref": "alphabet/alphabet_10_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#9D4EDD",
+    "#FF70A6",
+    "#FFC9DE",
+    "#E3CCFF",
+    "#BDEBFA",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "alphabet_11",
+   "category": "alphabet",
+   "index": 11,
+   "title": "Kk 风筝 Kite",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_11_line.png",
+   "ref": "alphabet/alphabet_11_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#FF6F00",
+    "#2400FF",
+    "#FFD600",
+    "#E61919",
+    "#9D4EDD",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "alphabet_12",
+   "category": "alphabet",
+   "index": 12,
+   "title": "Ll 狮子 Lion",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_12_line.png",
+   "ref": "alphabet/alphabet_12_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#FFD600",
+    "#FF6F00",
+    "#FFB58A",
+    "#A45A2A",
+    "#E61919",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "alphabet_13",
+   "category": "alphabet",
+   "index": 13,
+   "title": "Mm 月亮 Moon",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_13_line.png",
+   "ref": "alphabet/alphabet_13_ref.webp",
+   "regions": 10,
+   "palette": [
+    "#2400FF",
+    "#FFD600",
+    "#9D4EDD",
+    "#BDEBFA",
+    "#FF6F00",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "alphabet_14",
+   "category": "alphabet",
+   "index": 14,
+   "title": "Nn 鸟窝 Nest",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_14_line.png",
+   "ref": "alphabet/alphabet_14_ref.webp",
+   "regions": 12,
+   "palette": [
+    "#38B000",
+    "#A45A2A",
+    "#E0A96D",
+    "#BDEBFA",
+    "#00B4D8",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "alphabet_15",
+   "category": "alphabet",
+   "index": 15,
+   "title": "Oo 章鱼 Octopus",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_15_line.png",
+   "ref": "alphabet/alphabet_15_ref.webp",
+   "regions": 15,
+   "palette": [
+    "#9D4EDD",
+    "#FF70A6",
+    "#BDEBFA",
+    "#E3CCFF",
+    "#E61919",
+    "#FF6F00"
+   ]
+  },
+  {
+   "id": "alphabet_16",
+   "category": "alphabet",
+   "index": 16,
+   "title": "Pp 企鹅 Penguin",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_16_line.png",
+   "ref": "alphabet/alphabet_16_ref.webp",
+   "regions": 17,
+   "palette": [
+    "#2400FF",
+    "#00B4D8",
+    "#1B3A8C",
+    "#E61919",
+    "#FF6F00",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_17",
+   "category": "alphabet",
+   "index": 17,
+   "title": "Qq 皇冠 Queen crown",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_17_line.png",
+   "ref": "alphabet/alphabet_17_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#9D4EDD",
+    "#FFD600",
+    "#FF006E",
+    "#FF6F00",
+    "#00B4D8",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "alphabet_18",
+   "category": "alphabet",
+   "index": 18,
+   "title": "Rr 彩虹 Rainbow",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_18_line.png",
+   "ref": "alphabet/alphabet_18_ref.webp",
+   "regions": 13,
+   "palette": [
+    "#E61919",
+    "#38B000",
+    "#FF6F00",
+    "#FFD600",
+    "#00B4D8",
+    "#FF70A6"
+   ]
+  },
+  {
+   "id": "alphabet_19",
+   "category": "alphabet",
+   "index": 19,
+   "title": "Ss 太阳 Sun",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_19_line.png",
+   "ref": "alphabet/alphabet_19_ref.webp",
+   "regions": 16,
+   "palette": [
+    "#FFD600",
+    "#FF6F00",
+    "#FF70A6",
+    "#E61919",
+    "#38B000",
+    "#007F5F"
+   ]
+  },
+  {
+   "id": "alphabet_20",
+   "category": "alphabet",
+   "index": 20,
+   "title": "Tt 大树 Tree",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_20_line.png",
+   "ref": "alphabet/alphabet_20_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#B6F09C",
+    "#38B000",
+    "#A45A2A",
+    "#E61919",
+    "#FF6F00",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_21",
+   "category": "alphabet",
+   "index": 21,
+   "title": "Uu 雨伞 Umbrella",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_21_line.png",
+   "ref": "alphabet/alphabet_21_ref.webp",
+   "regions": 12,
+   "palette": [
+    "#2400FF",
+    "#00B4D8",
+    "#E61919",
+    "#FFD600",
+    "#FF6F00",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "alphabet_22",
+   "category": "alphabet",
+   "index": 22,
+   "title": "Vv 火山 Volcano",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_22_line.png",
+   "ref": "alphabet/alphabet_22_ref.webp",
+   "regions": 10,
+   "palette": [
+    "#B6F09C",
+    "#A45A2A",
+    "#E61919",
+    "#FF6F00",
+    "#D5DBE5",
+    "#FFD600"
+   ]
+  },
+  {
+   "id": "alphabet_23",
+   "category": "alphabet",
+   "index": 23,
+   "title": "Ww 鲸鱼 Whale",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_23_line.png",
+   "ref": "alphabet/alphabet_23_ref.webp",
+   "regions": 10,
+   "palette": [
+    "#00B4D8",
+    "#2400FF",
+    "#BDEBFA",
+    "#FFD600",
+    "#FF70A6",
+    "#E61919"
+   ]
+  },
+  {
+   "id": "alphabet_24",
+   "category": "alphabet",
+   "index": 24,
+   "title": "Xx 木琴 Xylophone",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_24_line.png",
+   "ref": "alphabet/alphabet_24_ref.webp",
+   "regions": 12,
+   "palette": [
+    "#9D4EDD",
+    "#FF6F00",
+    "#A45A2A",
+    "#E61919",
+    "#FFD600",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "alphabet_25",
+   "category": "alphabet",
+   "index": 25,
+   "title": "Yy 悠悠球 Yo-yo",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_25_line.png",
+   "ref": "alphabet/alphabet_25_ref.webp",
+   "regions": 13,
+   "palette": [
+    "#E61919",
+    "#FFD600",
+    "#00B4D8",
+    "#FF70A6",
+    "#FF6F00",
+    "#38B000"
+   ]
+  },
+  {
+   "id": "alphabet_26",
+   "category": "alphabet",
+   "index": 26,
+   "title": "Zz 斑马 Zebra",
+   "difficulty": "easy",
+   "line": "alphabet/alphabet_26_line.png",
+   "ref": "alphabet/alphabet_26_ref.webp",
+   "regions": 14,
+   "palette": [
+    "#8D99AE",
+    "#38B000",
+    "#D5DBE5",
+    "#FF70A6",
+    "#FFD600",
+    "#E61919"
+   ]
+  }
+ ]
+}

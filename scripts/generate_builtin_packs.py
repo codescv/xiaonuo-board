@@ -33,7 +33,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -663,6 +663,21 @@ def umbrella_canopy(p, cx, tip_y, base_y, half_w, colors, scallop=34):
     return ids
 
 
+def bunting(p, ctrl, cols, half=50, drop_len=105, w=7):
+    """Rope (ink) along a smooth curve with triangular flags hanging from it."""
+    curve = catmull(ctrl, False, 30)
+    p.line(curve, w)
+    xs = np.array([c[0] for c in curve])
+    ys = np.array([c[1] for c in curve])
+    x0, x1 = ctrl[0][0], ctrl[-1][0]
+    n = len(cols)
+    for k in range(n):
+        cx = x0 + (x1 - x0) * (k + 0.5) / n
+        top = [(x, float(np.interp(x, xs, ys))) for x in np.linspace(cx - half, cx + half, 9)]
+        cy = float(np.interp(cx, xs, ys))
+        p.poly(top + [(cx, cy + drop_len)], cols[k])
+
+
 # ---------------------------------------------------------------------------
 # Bubble letters
 # ---------------------------------------------------------------------------
@@ -711,11 +726,11 @@ OX, OY = 600, 1200   # object centre
 def alpha_a(p):
     bubble_pair(p, "A", "a", RED, GREEN)
     p.ellipse(OX, 1455, 280, 55, LSKY)
-    body = p.smooth([(OX, 1000), (OX + 90, 960), (OX + 210, 1010), (OX + 245, 1160), (OX + 190, 1340),
+    p.smooth([(OX, 1000), (OX + 90, 960), (OX + 210, 1010), (OX + 245, 1160), (OX + 190, 1340),
                      (OX + 90, 1420), (OX, 1395), (OX - 90, 1420), (OX - 190, 1340), (OX - 245, 1160),
                      (OX - 210, 1010), (OX - 90, 960)], RED)
     p.poly(rotate([(OX - 16, 1010), (OX - 12, 900), (OX + 14, 900), (OX + 16, 1010)], 12, OX, 1000), BROWN)
-    leaf = p.ellipse(OX + 95, 930, 80, 36, GREEN, rot=-25)
+    p.ellipse(OX + 95, 930, 80, 36, GREEN, rot=-25)
     p.line(rotate([(OX + 30, 930), (OX + 160, 930)], -25, OX + 95, 930), 6)
     p.ellipse(OX - 130, 1110, 30, 62, WHITE, rot=20)
     sparkle(p, OX - 330, 1000, 55, YELLOW)
@@ -933,7 +948,7 @@ def alpha_n(p):
     p.ellipse(1000, 1270, 60, 26, GREEN, rot=20)
     for dx, c in ((-110, LSKY), (0, SKY), (110, LSKY)):
         p.ellipse(OX + dx, 1140, 70, 92, c)
-    nest = p.smooth([(OX - 270, 1180), (OX + 270, 1180), (OX + 230, 1310), (OX, 1370), (OX - 230, 1310)], TAN)
+    p.smooth([(OX - 270, 1180), (OX + 270, 1180), (OX + 230, 1310), (OX, 1370), (OX - 230, 1310)], TAN)
     p.arc(OX, 1210, 220, 60, 20, 160, 6)
     p.arc(OX, 1250, 180, 60, 30, 150, 6)
     p.curve([(OX - 200, 1215), (OX - 60, 1270), (OX + 100, 1230)], 6)
@@ -972,7 +987,6 @@ def alpha_p(p):
     p.eye(OX + 58, 1030, 24)
     p.smooth([(OX - 36, 1075), (OX + 36, 1075), (OX, 1115)], ORANGE, 6)
     p.smooth([(OX - 150, 1140), (OX, 1170), (OX + 150, 1140), (OX + 148, 1200), (OX, 1230), (OX - 148, 1200)], RED)
-    p.poly([(OX + 50, 1215), (OX + 110, 1205), (OX + 125, 1320), (OX + 65, 1330)], RED)
     for sx in (-1, 1):
         p.ellipse(OX + sx * 75, 1470, 75, 32, ORANGE)
     for (x, y) in ((OX - 320, 1000), (OX + 320, 1050)):
@@ -1059,7 +1073,7 @@ def alpha_w(p):
     p.smooth([(OX - 260, 1250), (OX - 220, 1100), (OX - 60, 1030), (OX + 120, 1060), (OX + 220, 1170),
               (OX + 300, 1210), (OX + 330, 1300), (OX + 200, 1330), (OX - 40, 1350), (OX - 210, 1330)], body)
     p.poly([(OX + 280, 1220), (OX + 330, 1110), (OX + 360, 1180), (OX + 420, 1140), (OX + 360, 1250)], body)
-    belly = p.ellipse(OX - 30, 1330, 220, 70, LSKY, clip=body)
+    p.ellipse(OX - 30, 1330, 220, 70, LSKY, clip=body)
     p.eye(OX - 140, 1180, 20)
     p.smile(OX - 180, 1255, 70)
     p.circle(OX - 90, 1240, 20, PINK)
@@ -1370,8 +1384,8 @@ def elsa_09(p):
     cloud(p, 230, 200, 0.9)
     cloud(p, 640, 300, 0.7)
     p.band([(-10, 1180), (300, 1150), (650, 1190), (1000, 1140), (1210, 1160)], 1620, WHITE)
-    pine(p, 110, 1190, 0.85, tiers=3)
-    pine(p, 1100, 1180, 0.85, tiers=3)
+    snow_star(p, 1000, 520, 48, WHITE)
+    snow_star(p, 140, 560, 44, WHITE)
     snowman(p, 330, 1440, 1.0, hat=BLUE, band=RED, scarf=RED)
     snowman(p, 790, 1460, 0.82, hat=PURPLE, band=PINK, scarf=PINK)
     snowman(p, 1090, 1520, 0.6, hat=GREEN, band=None, scarf=ORANGE, mouth=False, buttons=False)
@@ -1468,12 +1482,12 @@ def bluey_02(p):
 
 @scene("bluey", 3, "神奇魔术帽", "a magician's top hat with bunny ears popping out, a magic wand with a star and sparkles")
 def bluey_03(p):
-    crown = p.rect(420, 820, 780, 1230, PURPLE)
+    p.rect(420, 820, 780, 1230, PURPLE)
     hole = p.ellipse(600, 822, 180, 40, NAVY)
     for sx in (-1, 1):
         p.ellipse(600 + sx * 70, 640, 52, 175, WHITE, rot=sx * 10, clip=[0, hole])
         p.ellipse(600 + sx * 72, 650, 24, 120, PINK, rot=sx * 10, clip=[0, hole])
-    p.rect(420, 1110, 780, 1180, RED)
+    p.rect(420, 1080, 780, 1150, RED)
     p.ellipse(600, 1240, 270, 52, PURPLE)
     stick = [(-17, 0), (17, 0), (17, 420), (-17, 420)]
     p.poly(tf(stick, 995, 860, rot=25), BLACK)
@@ -1506,14 +1520,13 @@ def bluey_04(p):
 def bluey_05(p):
     p.bg(LSKY)
     sun(p, 180, 200, 80, YELLOW, rays=10, ink_rays=True, ray_len=40)
-    cloud(p, 900, 260, 0.9)
     wave_band(p, 640, 14, SKY, period=170)
     p.band([(-10, 900), (400, 870), (800, 900), (1210, 875)], 1620, SAND)
     bucket(p, 560, 1330, 420, 420, RED, YELLOW)
     p.poly(tf([(-14, 0), (14, 0), (14, 390), (-14, 390)], 960, 920, rot=-18), YELLOW)
     p.smooth([(1000, 1290), (1100, 1300), (1120, 1400), (1060, 1470), (1000, 1420)], BLUE)
     p.star(220, 1370, 105, ORANGE, ri=48, rounded=True)
-    shell = p.pie(760, 1500, 110, 110, 200, 340, PINK)
+    p.pie(760, 1500, 110, 110, 200, 340, PINK)
     for a in (230, 270, 310):
         r = math.radians(a)
         p.line([(760 + 20 * math.cos(r), 1500 + 20 * math.sin(r)), (760 + 85 * math.cos(r), 1500 + 85 * math.sin(r))], 6)
@@ -1528,7 +1541,7 @@ def bluey_06(p):
     p.band([(-10, 1150), (400, 1130), (800, 1150), (1210, 1130)], 1620, LGREEN)
     fence = p.new(TAN)
     p.rect(-10, 1000, 1210, 1035, fence)
-    p.rect(-10, 1085, 1210, 1120, fence)
+    p.rect(-10, 1062, 1210, 1095, fence)
     for k in range(10):
         x = 30 + k * 130
         p.poly([(x - 26, 1160), (x - 26, 960), (x, 925), (x + 26, 960), (x + 26, 1160)], fence)
@@ -1594,7 +1607,7 @@ def bluey_08(p):
             p.rect(x - 60 + k * 45, top - 36, x - 30 + k * 45, top + 4, t)
         p.line([(x, top - 36), (x, top - 120)], 6)
         p.poly([(x, top - 120), (x + 60, top - 100), (x, top - 80)], PINK if x < 600 else SKY)
-    wall = p.rect(440, 1100, 760, 1320, SAND)
+    p.rect(440, 1100, 760, 1320, SAND)
     c = p.rect(510, 880, 690, 1150, TAN)
     for k in range(4):
         p.rect(510 + k * 50, 844, 540 + k * 50, 884, c)
@@ -1615,7 +1628,7 @@ def bluey_09(p):
     p.ellipse(600, 1400, 400, 115, PURPLE)
     p.ellipse(600, 1400, 290, 70, LPURPLE)
     p.rect(700, 300, 1080, 720, WHITE)
-    panes = p.rect(730, 330, 1050, 690, LSKY)
+    p.rect(730, 330, 1050, 690, LSKY)
     p.line([(890, 330), (890, 690)], 8)
     p.line([(730, 510), (1050, 510)], 8)
     for (x0, x1) in ((640, 730), (1050, 1140)):
@@ -1632,12 +1645,7 @@ def bluey_09(p):
     balloon(p, 300, 470, 1.0, RED, (330, 760))
     balloon(p, 480, 360, 1.0, BLUE, (450, 650))
     balloon(p, 860, 940, 0.9, GREEN, (880, 1140))
-    p.curve([(-10, 110), (300, 170), (600, 190), (900, 170), (1210, 110)], 7)
-    cols = [RED, YELLOW, SKY, GREEN, PURPLE, ORANGE, PINK]
-    for k in range(7):
-        x = 90 + k * 170
-        y = 110 + 80 * math.sin(math.pi * (x + 10) / 1220) - 4
-        p.poly([(x - 50, y), (x + 50, y + 4), (x, y + 110)], cols[k])
+    bunting(p, [(-10, 110), (300, 170), (600, 190), (900, 170), (1210, 110)], [RED, YELLOW, SKY, GREEN, PURPLE, ORANGE, PINK])
 
 
 @scene("bluey", 10, "后院滑梯和沙池", "a backyard playground with a slide and ladder, a sandbox with a bucket and spade, a ball, flowers and a butterfly")
@@ -1657,7 +1665,7 @@ def bluey_10(p):
     p.poly([(330, 1260), (390, 590), (425, 590), (365, 1260)], BLUE)
     p.rect(190, 560, 440, 600, BLUE, r=10)
     p.rect(700, 1270, 1150, 1500, BROWN)
-    sand = p.rect(735, 1300, 1115, 1465, SAND)
+    p.rect(735, 1300, 1115, 1465, SAND)
     bucket(p, 860, 1430, 120, 110, PINK)
     p.poly(tf([(-10, 0), (10, 0), (10, 150), (-10, 150)], 1020, 1270, rot=-20), YELLOW)
     p.smooth([(1050, 1405), (1100, 1410), (1095, 1455), (1055, 1450)], GREEN)
@@ -1670,6 +1678,559 @@ def bluey_10(p):
     p.ellipse(930, 785, 10, 42, BLACK)
     p.curve([(925, 745), (910, 710), (895, 700)], 5)
     p.curve([(935, 745), (950, 710), (965, 700)], 5)
+
+
+# ===========================================================================
+# Tab "peppa": original rainy-day / family-outing themed scenes (no characters)
+# ===========================================================================
+def rain_boot(p, x0, yb, s=1.0, c=RED, cuff=YELLOW, sole=BROWN, flip=False):
+    sx = -1 if flip else 1
+
+    def X(dx):
+        return x0 + sx * dx * s
+    body = [(X(0), yb - 520 * s), (X(150), yb - 520 * s), (X(150), yb - 190 * s), (X(235), yb - 165 * s),
+            (X(265), yb - 90 * s), (X(262), yb - 40 * s), (X(0), yb - 40 * s)]
+    p.poly(catmull(body, True, 4), c)
+    p.rect(min(X(-6), X(268)), yb - 50 * s, max(X(-6), X(268)), yb, sole, r=12 * s)
+    p.rect(min(X(-12), X(162)), yb - 545 * s, max(X(-12), X(162)), yb - 470 * s, cuff, r=14 * s)
+
+
+def car(p, x, yb, s=1.0, body=RED, win=LSKY, wheel=NAVY, hub=LGRAY, light=YELLOW):
+    p.smooth([(x - 300 * s, yb - 80 * s), (x - 290 * s, yb - 190 * s), (x - 170 * s, yb - 210 * s),
+              (x - 120 * s, yb - 330 * s), (x + 110 * s, yb - 330 * s), (x + 180 * s, yb - 210 * s),
+              (x + 290 * s, yb - 190 * s), (x + 310 * s, yb - 80 * s), (x, yb - 60 * s)], body, 6)
+    p.poly([(x - 140 * s, yb - 210 * s), (x - 100 * s, yb - 300 * s), (x - 15 * s, yb - 300 * s), (x - 15 * s, yb - 210 * s)], win)
+    p.poly([(x + 15 * s, yb - 210 * s), (x + 15 * s, yb - 300 * s), (x + 95 * s, yb - 300 * s), (x + 150 * s, yb - 210 * s)], win)
+    p.ellipse(x + 270 * s, yb - 160 * s, 26 * s, 22 * s, light)
+    p.line([(x + 40 * s, yb - 170 * s), (x + 85 * s, yb - 170 * s)], max(6, 8 * s))
+    for dx in (-170, 170):
+        p.circle(x + dx * s, yb - 70 * s, 72 * s, wheel)
+        p.circle(x + dx * s, yb - 70 * s, 30 * s, hub)
+
+
+def hot_air_balloon(p, x, y, s, cols, basket=BROWN):
+    p.line([(x - 60 * s, y + 170 * s), (x - 42 * s, y + 255 * s)], 6)
+    p.line([(x + 60 * s, y + 170 * s), (x + 42 * s, y + 255 * s)], 6)
+    p.rect(x - 55 * s, y + 250 * s, x + 55 * s, y + 340 * s, basket, r=10 * s)
+    env = p.smooth([(x, y - 200 * s), (x + 150 * s, y - 140 * s), (x + 175 * s, y), (x + 120 * s, y + 120 * s),
+                    (x + 62 * s, y + 180 * s), (x - 62 * s, y + 180 * s), (x - 120 * s, y + 120 * s),
+                    (x - 175 * s, y), (x - 150 * s, y - 140 * s)], cols[0])
+    n = len(cols)
+    for k in range(1, n, 2):
+        u0, u1 = -1 + 2 * k / n, -1 + 2 * (k + 1) / n
+        left = [(x + 200 * s * u0 * math.sin(math.pi * t / 20) ** 0.8, y - 200 * s + t * 20 * s) for t in range(21)]
+        right = [(x + 200 * s * u1 * math.sin(math.pi * t / 20) ** 0.8, y - 200 * s + t * 20 * s) for t in range(21)]
+        p.poly(left + right[::-1], cols[k], clip=env)
+    p.rect(x - 64 * s, y + 160 * s, x + 64 * s, y + 195 * s, cols[-1], r=8 * s)
+
+
+def lighthouse(p, x, yb, s=1.0):
+    body = p.poly([(x - 85 * s, yb), (x - 55 * s, yb - 430 * s), (x + 55 * s, yb - 430 * s), (x + 85 * s, yb)], WHITE)
+    for k in (0, 2):
+        y0 = yb - 430 * s + (k + 1) * 430 * s / 4
+        p.rect(x - 100 * s, y0 - 50 * s, x + 100 * s, y0 + 50 * s, RED, clip=body)
+    p.rect(x - 75 * s, yb - 470 * s, x + 75 * s, yb - 430 * s, NAVY)
+    p.rect(x - 50 * s, yb - 560 * s, x + 50 * s, yb - 470 * s, YELLOW)
+    p.poly([(x - 72 * s, yb - 560 * s), (x, yb - 630 * s), (x + 72 * s, yb - 560 * s)], RED)
+    p.poly(arch_pts(x - 26 * s, x + 26 * s, yb, yb - 110 * s), BROWN)
+
+
+@scene("peppa", 1, "雨靴跳泥坑", "a pair of shiny rain boots splashing in a muddy puddle under a rain cloud")
+def peppa_01(p):
+    p.smooth([(150, 1360), (400, 1260), (800, 1250), (1060, 1330), (1000, 1470), (600, 1500), (220, 1470)], BROWN)
+    for (x, y) in ((140, 1180), (1080, 1170)):
+        drop(p, x, y, 1.0, BROWN)
+    rain_boot(p, 230, 1380, 1.0, RED, YELLOW, NAVY)
+    rain_boot(p, 640, 1340, 1.0, RED, YELLOW, NAVY)
+    cloud(p, 600, 250, 1.6, LGRAY)
+    for (x, y) in ((360, 520), (560, 560), (760, 520), (960, 580)):
+        drop(p, x, y, 1.0, SKY)
+
+
+@scene("peppa", 2, "小雨伞", "a big colorful umbrella with a curved handle in the rain, with a cloud and a puddle")
+def peppa_02(p):
+    p.ellipse(600, 1420, 360, 80, LSKY)
+    p.arc(600, 1420, 220, 40, 200, 340, 6)
+    p.line([(600, 800), (600, 1250)], 16)
+    p.arc(540, 1250, 60, 60, 0, 180, 16)
+    umbrella_canopy(p, 600, 370, 800, 420, [RED, YELLOW, SKY, GREEN, PURPLE, ORANGE], scallop=30)
+    p.circle(600, 350, 30, PINK)
+    cloud(p, 200, 180, 0.9, LGRAY)
+    for (x, y) in ((1040, 230), (150, 950), (1050, 960), (900, 1220), (280, 1200)):
+        drop(p, x, y, 1.1, SKY)
+
+
+@scene("peppa", 3, "滑板车", "a kick scooter with a red deck and big wheels on a sunny path")
+def peppa_03(p):
+    sun(p, 1020, 220, 85, YELLOW, rays=10, ink_rays=True, ray_len=45)
+    cloud(p, 230, 250, 1.0)
+    p.band([(-10, 1330), (400, 1310), (800, 1330), (1210, 1310)], 1620, LGREEN)
+    p.poly([(790, 1170), (840, 1170), (760, 640), (712, 646)], LGRAY)
+    p.rect(600, 590, 860, 640, BLUE, r=20)
+    p.rect(570, 580, 660, 650, PINK, r=20)
+    p.rect(830, 580, 920, 650, PINK, r=20)
+    p.rect(270, 1130, 880, 1200, RED, r=30)
+    for x in (340, 860):
+        p.circle(x, 1250, 85, NAVY)
+        p.circle(x, 1250, 34, YELLOW)
+
+
+@scene("peppa", 4, "生日蛋糕", "a two-layer birthday cake with frosting, hearts and three candles on a plate")
+def peppa_04(p):
+    p.ellipse(600, 1340, 370, 62, LSKY)
+    bot = p.rect(280, 1050, 920, 1330, PINK, r=24)
+    pts = [(275, 1045), (925, 1045)]
+    for k in range(10, -1, -1):
+        pts.append((280 + 64 * k, 1110 + (34 if k % 2 == 0 else 0)))
+    p.poly(catmull(pts[:2], False, 1) + catmull(pts[2:], False, 6), WHITE, clip=bot)
+    top = p.rect(390, 820, 810, 1060, LYELLOW, r=20)
+    pts = [(385, 815), (815, 815)]
+    for k in range(7, -1, -1):
+        pts.append((390 + 60 * k, 870 + (30 if k % 2 == 0 else 0)))
+    p.poly(catmull(pts[:2], False, 1) + catmull(pts[2:], False, 6), PINK, clip=top)
+    for x, c in ((490, SKY), (600, GREEN), (710, PURPLE)):
+        p.rect(x - 20, 690, x + 20, 822, c, r=6)
+        p.smooth([(x, 600), (x + 26, 650), (x, 680), (x - 26, 650)], ORANGE, 6)
+    p.heart(420, 1220, 55, RED)
+    p.heart(780, 1220, 55, RED)
+    sparkle(p, 170, 600, 60, YELLOW)
+    sparkle(p, 1030, 640, 55, YELLOW)
+
+
+@scene("peppa", 5, "红色小汽车", "a cute little red family car driving on a road under the sun")
+def peppa_05(p):
+    sun(p, 1000, 230, 90, YELLOW, rays=10, ink_rays=True, ray_len=45)
+    cloud(p, 230, 260, 1.0)
+    p.band([(-10, 1080), (400, 1060), (800, 1080), (1210, 1060)], 1620, LGREEN)
+    p.rect(-10, 1180, 1210, 1420, LGRAY)
+    for x in (150, 1050):
+        p.rect(x - 70, 1290, x + 70, 1315, WHITE)
+    car(p, 600, 1320, 1.35)
+
+
+@scene("peppa", 6, "茶话会", "a little tea party: a table with a scalloped tablecloth, a teapot, cups and saucers, cupcakes and a flower vase, with bunting")
+def peppa_06(p):
+    p.bg(LYELLOW)
+    bunting(p, [(-10, 120), (300, 190), (600, 210), (900, 190), (1210, 120)], [RED, SKY, GREEN, PURPLE, ORANGE, PINK, BLUE])
+    p.rect(-10, 1300, 1210, 1620, TAN)
+    p.rect(160, 1100, 200, 1420, BROWN)
+    p.rect(1000, 1100, 1040, 1420, BROWN)
+    pts = [(80, 900), (1120, 900)]
+    for k in range(12, -1, -1):
+        x0 = 80 + 80 * k
+        pts += ellipse_pts(x0 + 40, 1150, 40, 40, 0, 0, 180, 10)
+    p.poly(pts, PINK)
+    p.rect(60, 880, 1140, 930, ROSE, r=12)
+    # vase + flowers
+    p.smooth([(140, 880), (220, 880), (240, 800), (210, 700), (150, 700), (120, 800)], SKY)
+    for (x, y, c) in ((140, 560, YELLOW), (240, 600, RED)):
+        flower(p, x, y, 0.9, c, ORANGE if c == YELLOW else YELLOW, stem_len=130, leaf=None)
+    # teapot
+    p.arc(580, 740, 70, 80, 270, 450, 16)
+    p.poly([(400, 760), (300, 640), (330, 625), (440, 730)], PURPLE)
+    p.ellipse(480, 760, 140, 120, PURPLE)
+    p.chord(480, 660, 90, 40, 180, 360, LPURPLE)
+    p.circle(480, 600, 24, YELLOW)
+    p.heart(480, 780, 46, PINK)
+    # cups
+    for (x, c) in ((720, SKY), (1000, GREEN)):
+        p.arc(x + 70, 820, 34, 30, 270, 450, 12)
+        p.ellipse(x, 880, 110, 22, WHITE)
+        p.chord(x, 790, 75, 85, 0, 180, c)
+    # cupcakes on stand
+    p.rect(845, 640, 865, 860, LGRAY)
+    p.ellipse(855, 640, 120, 18, LGRAY)
+    for dx, c in ((-60, PINK), (60, YELLOW)):
+        p.poly([(855 + dx - 45, 625), (855 + dx + 45, 625), (855 + dx + 35, 560), (855 + dx - 35, 560)], ORANGE)
+        p.smooth([(855 + dx - 50, 565), (855 + dx, 490), (855 + dx + 50, 565)], c, 6)
+
+
+@scene("peppa", 7, "菜园和小火车", "a vegetable garden with carrots, cabbages and a sunflower, and a toy steam train puffing along the track")
+def peppa_07(p):
+    p.bg(LSKY)
+    sun(p, 1060, 160, 70, YELLOW, rays=10, ink_rays=True, ray_len=36)
+    cloud(p, 560, 170, 0.8)
+    p.band([(-10, 560), (300, 500), (600, 540), (900, 490), (1210, 540)], 1620, LGREEN)
+    # train
+    p.rect(-10, 830, 1210, 860, GRAY)
+    cloud(p, 220, 380, 0.55, WHITE)
+    p.rect(150, 560, 390, 640, RED, r=10)
+    p.rect(170, 640, 370, 800, RED)
+    p.rect(210, 670, 330, 750, LSKY)
+    p.rect(370, 680, 600, 800, BLUE, r=14)
+    p.poly([(470, 680), (450, 560), (550, 560), (520, 680)], NAVY)
+    p.poly([(590, 730), (670, 815), (590, 815)], YELLOW)
+    for (x, r) in ((240, 50), (420, 38), (540, 38)):
+        p.circle(x, 810, r, NAVY)
+        p.dot(x, 810, 10)
+    for x0, c in ((680, GREEN), (920, ORANGE)):
+        p.line([(x0 - 30, 760), (x0, 760)], 10)
+        p.rect(x0, 640, x0 + 210, 800, c, r=12)
+        for dx in (50, 160):
+            p.circle(x0 + dx, 815, 36, NAVY)
+            p.dot(x0 + dx, 815, 9)
+    # garden
+    p.rect(-10, 1000, 1210, 1620, BROWN)
+    for k, x in enumerate(range(130, 1200, 235)):
+        p.poly([(x - 34, 1085), (x + 34, 1085), (x, 1172)], ORANGE)
+        p.smooth([(x - 30, 1088), (x - 48, 1030), (x - 22, 1040), (x - 10, 1000), (x, 1030), (x + 12, 1000),
+                  (x + 22, 1040), (x + 48, 1030), (x + 30, 1088)], GREEN, 6)
+    for x in range(160, 1200, 280):
+        p.circle(x, 1300, 80, LGREEN)
+        p.ellipse(x, 1310, 42, 52, GREEN)
+    for x in range(270, 1100, 280):
+        p.ellipse(x, 1490, 90, 62, ORANGE)
+        p.arc(x, 1490, 40, 52, 120, 240, 6)
+        p.arc(x, 1490, 40, 52, -60, 60, 6)
+        p.line([(x, 1428), (x + 10, 1395)], 12)
+    p.rect(1080, 880, 1100, 1060, GREEN)
+    p.circle(1090, 860, 70, YELLOW)
+    p.circle(1090, 860, 32, BROWN)
+
+
+@scene("peppa", 8, "热气球飞上天", "three striped hot-air balloons floating over green hills with clouds, birds and little houses")
+def peppa_08(p):
+    p.bg(LSKY)
+    cloud(p, 200, 200, 0.9)
+    cloud(p, 1000, 640, 0.8)
+    cloud(p, 640, 960, 0.6)
+    hot_air_balloon(p, 340, 520, 1.2, [RED, YELLOW, RED, YELLOW, RED, BLUE])
+    hot_air_balloon(p, 850, 330, 0.95, [SKY, WHITE, SKY, WHITE, SKY, PINK])
+    hot_air_balloon(p, 900, 900, 0.7, [GREEN, ORANGE, GREEN, ORANGE, GREEN, PURPLE])
+    bird(p, 600, 230)
+    bird(p, 680, 290, 0.8)
+    p.band([(-10, 1260), (300, 1180), (600, 1260), (900, 1200), (1210, 1270)], 1620, GREEN)
+    p.band([(-10, 1430), (400, 1380), (800, 1440), (1210, 1390)], 1620, LGREEN)
+    house(p, 260, 1320, 160, 120, PEACH, RED, BROWN, LSKY, chimney=False)
+    house(p, 900, 1330, 160, 120, LYELLOW, BLUE, BROWN, LSKY, chimney=False)
+    for x in (560, 1100):
+        p.circle(x, 1300, 50, FOREST)
+
+
+@scene("peppa", 9, "海边度假", "a sunny seaside holiday with a striped lighthouse, sailboat, beach umbrella, deck chair, sandcastle, beach ball and shells")
+def peppa_09(p):
+    p.bg(LSKY)
+    sun(p, 160, 170, 75, YELLOW, rays=10, ink_rays=True, ray_len=40)
+    cloud(p, 640, 180, 0.8)
+    wave_band(p, 620, 12, SKY, period=180)
+    p.poly([(560, 650), (780, 650), (740, 710), (600, 710)], ORANGE)
+    p.line([(670, 650), (670, 420)], 7)
+    p.poly([(676, 430), (676, 630), (780, 630)], WHITE)
+    p.poly([(664, 450), (664, 630), (570, 630)], RED)
+    p.band([(-10, 880), (300, 860), (600, 890), (1210, 860)], 1620, SAND)
+    p.poly([(820, 900), (1210, 760), (1210, 940)], GRAY)
+    lighthouse(p, 1040, 900, 1.0)
+    p.line([(260, 1300), (300, 930)], 12)
+    umbrella_canopy(p, 300, 780, 940, 230, [YELLOW, BLUE, YELLOW, BLUE], scallop=26)
+    p.poly([(420, 1180), (640, 1180), (700, 1300), (480, 1300)], SKY)
+    p.poly([(400, 1060), (470, 1050), (520, 1185), (440, 1190)], SKY)
+    p.line([(480, 1300), (440, 1380)], 9)
+    p.line([(700, 1300), (730, 1380)], 9)
+    p.rect(780, 1260, 980, 1400, TAN)
+    for k in range(3):
+        p.rect(780 + k * 75, 1225, 830 + k * 75, 1265, TAN)
+    p.poly(arch_pts(850, 910, 1400, 1320), BROWN)
+    beach_ball(p, 160, 1420, 80)
+    p.star(400, 1490, 60, ORANGE, ri=27, rounded=True)
+    p.pie(1080, 1500, 70, 70, 200, 340, PINK)
+
+
+@scene("peppa", 10, "雨后彩虹泥坑", "after the rain: a rainbow over a hill with a little house and tree, muddy puddles, rain boots, an umbrella and flowers")
+def peppa_10(p):
+    p.bg(LSKY)
+    for k, c in enumerate((RED, ORANGE, YELLOW, GREEN, SKY, PURPLE)):
+        p.pie(600, 900, 560 - k * 50, 560 - k * 50, 180, 360, c)
+    p.pie(600, 900, 260, 260, 180, 360, 0)
+    cloud(p, 120, 820, 1.1)
+    cloud(p, 1080, 820, 1.1)
+    p.band([(-10, 980), (300, 760), (600, 700), (900, 760), (1210, 980)], 1620, LGREEN)
+    house(p, 600, 860, 200, 150, LYELLOW, RED, BROWN, LSKY, chimney=True)
+    round_tree(p, 950, 960, 0.6, GREEN, BROWN, None)
+    for (x, y, rx) in ((300, 1250, 200), (850, 1400, 240)):
+        p.ellipse(x, y, rx, 60, BROWN)
+    rain_boot(p, 620, 1330, 0.5, YELLOW, RED, NAVY)
+    rain_boot(p, 760, 1330, 0.5, YELLOW, RED, NAVY)
+    p.line([(160, 1560), (230, 1330)], 12)
+    p.poly(tf(arch_pts(-150, 150, 0, -130)[1:-1], 260, 1330, rot=20), PINK)
+    for (x, c) in ((420, PURPLE), (1080, ORANGE)):
+        flower(p, x, 1440, 1.0, c, YELLOW)
+
+
+# ===========================================================================
+# Tab "anpanman": original bakery / bread themed scenes (no characters, no faces on bread)
+# ===========================================================================
+def stroke(p, pts, w, c):
+    """Thick filled stroke painted into the region-id buffer (one region)."""
+    i = p._id(c)
+    s = p.ss
+    r = w * s / 2
+    P = p._P(pts)
+    for (x0, y0), (x1, y1) in zip(P[:-1], P[1:]):
+        n = max(1, int(math.hypot(x1 - x0, y1 - y0) / (r * 0.2)))
+        for k in range(n + 1):
+            x, y = x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n
+            p.d.ellipse([x - r, y - r, x + r, y + r], fill=i)
+    return i
+
+
+def baguette(p, x, y, length, rot=0.0, c=TAN, cut=LYELLOW, ncut=3):
+    body = p.poly(ellipse_pts(x, y, length / 2, length * 0.13, rot, n=120), c)
+    for k in range(ncut):
+        t = (k + 0.5) / ncut - 0.5
+        cx = x + math.cos(math.radians(rot)) * t * length * 0.8
+        cy = y + math.sin(math.radians(rot)) * t * length * 0.8
+        p.ellipse(cx, cy, length * 0.09, length * 0.035, cut, rot=rot - 30, clip=body)
+    return body
+
+
+def croissant(p, x, y, s=1.0, c=LORANGE, c2=TAN, rot=0.0):
+    parts = [(-150, 30, 55, 34, -40, c2), (150, 30, 55, 34, 40, c2), (-85, -10, 70, 52, -25, c),
+             (85, -10, 70, 52, 25, c), (0, -30, 85, 70, 0, c2)]
+    for (dx, dy, rx, ry, a, col) in parts:
+        cx, cy = rotate([(dx * s, dy * s)], rot)[0]
+        p.ellipse(x + cx, y + cy, rx * s, ry * s, col, rot=a + rot)
+
+
+def donut(p, x, y, r, icing=PINK, dough=TAN, hole_id=0):
+    p.circle(x, y, r, dough)
+    ic = [(x + r * (0.84 + 0.06 * math.sin(6 * t)) * math.cos(t), y + r * (0.84 + 0.06 * math.sin(6 * t)) * math.sin(t))
+          for t in [2 * math.pi * k / 48 for k in range(48)]]
+    p.poly(ic, icing)
+    p.circle(x, y, r * 0.3, hole_id)
+    for k in range(5):
+        a = 2 * math.pi * k / 5 + 0.3
+        rx, ry = x + r * 0.58 * math.cos(a), y + r * 0.58 * math.sin(a)
+        p.line(rotate([(rx - r * 0.1, ry), (rx + r * 0.1, ry)], k * 47, rx, ry), max(5, r * 0.07))
+
+
+def cupcake(p, x, yb, s=1.0, wrap=SKY, frost=PINK, cherry=RED, pleats=3):
+    w = p.poly([(x - 120 * s, yb - 200 * s), (x + 120 * s, yb - 200 * s), (x + 90 * s, yb), (x - 90 * s, yb)], wrap)
+    for k in range(1, pleats + 1):
+        t = k / (pleats + 1)
+        p.line([(x - 120 * s + 240 * s * t, yb - 200 * s), (x - 90 * s + 180 * s * t, yb)], max(6, 8 * s), clip=w)
+    p.smooth([(x - 140 * s, yb - 200 * s), (x - 130 * s, yb - 270 * s), (x, yb - 300 * s), (x + 130 * s, yb - 270 * s),
+              (x + 140 * s, yb - 200 * s), (x, yb - 180 * s)], frost)
+    p.smooth([(x - 100 * s, yb - 270 * s), (x - 80 * s, yb - 340 * s), (x, yb - 370 * s), (x + 80 * s, yb - 340 * s),
+              (x + 100 * s, yb - 270 * s), (x, yb - 255 * s)], frost)
+    if cherry:
+        p.circle(x, yb - 385 * s, 36 * s, cherry)
+        p.curve([(x + 5 * s, yb - 418 * s), (x + 20 * s, yb - 460 * s), (x + 50 * s, yb - 475 * s)], max(6, 7 * s))
+
+
+@scene("anpanman", 1, "香喷喷面包", "a freshly baked loaf of bread with scored top on a wooden board, with butter and a knife")
+def anpanman_01(p):
+    p.rect(150, 1050, 1000, 1300, BROWN, r=40)
+    p.rect(990, 1120, 1130, 1230, BROWN, r=40)
+    p.circle(1080, 1175, 28, 0)
+    loaf = p.smooth([(220, 1100), (230, 880), (400, 760), (600, 730), (800, 760), (940, 880), (950, 1100), (600, 1130)], TAN)
+    for k in range(3):
+        x = 400 + k * 180
+        p.ellipse(x, 900, 85, 32, LYELLOW, rot=-35, clip=loaf)
+    p.ellipse(330, 1430, 190, 55, LSKY)
+    p.rect(250, 1360, 410, 1430, YELLOW, r=14)
+    p.poly([(600, 1450), (900, 1390), (905, 1430), (610, 1480)], LGRAY)
+    p.rect(890, 1370, 1060, 1440, RED, r=20)
+    for x in (480, 620, 760):
+        p.curve([(x, 690), (x - 30, 620), (x + 20, 560), (x - 10, 490)], 8)
+    sparkle(p, 160, 560, 60, YELLOW)
+    sparkle(p, 1050, 620, 55, YELLOW)
+
+
+@scene("anpanman", 2, "吐司片", "a slice of toast with a pat of butter and a jam heart on a plate, next to a jam jar and a strawberry")
+def anpanman_02(p):
+    p.ellipse(500, 1240, 400, 90, LSKY)
+    crust = [(200, 1220), (200, 700), (150, 620), (180, 480), (330, 420), (500, 450), (670, 420), (820, 480),
+             (850, 620), (800, 700), (800, 1220)]
+    p.poly(catmull(crust, True, 8), BROWN)
+    inner = [(250, 1170), (250, 690), (210, 620), (230, 520), (340, 475), (500, 505), (660, 475), (770, 520),
+             (790, 620), (750, 690), (750, 1170)]
+    p.poly(catmull(inner, True, 8), LYELLOW)
+    p.poly(rotate([(380, 700), (520, 700), (520, 820), (380, 820)], 12, 450, 760), YELLOW)
+    p.heart(560, 970, 120, RED)
+    p.rect(870, 1050, 1110, 1380, PINK, r=30)
+    p.rect(850, 980, 1130, 1060, ORANGE, r=16)
+    p.rect(900, 1150, 1080, 1280, WHITE, r=16)
+    p.smooth([(320, 1370), (400, 1350), (430, 1430), (370, 1510), (310, 1440)], RED)
+    p.poly([(330, 1365), (360, 1320), (375, 1355), (410, 1330), (395, 1375)], GREEN)
+    sparkle(p, 1000, 500, 60, YELLOW)
+    sparkle(p, 1000, 800, 45, YELLOW)
+
+
+@scene("anpanman", 3, "牛角面包", "a big flaky croissant on a plate next to a cup of warm milk")
+def anpanman_03(p):
+    p.ellipse(500, 1080, 400, 110, LSKY)
+    croissant(p, 500, 1010, 1.9)
+    p.arc(980, 1270, 60, 70, 270, 450, 18)
+    p.ellipse(880, 1430, 200, 45, PINK)
+    p.poly([(750, 1170), (1010, 1170), (980, 1410), (780, 1410)], WHITE)
+    p.heart(880, 1290, 70, PINK)
+    for x in (830, 930):
+        p.curve([(x, 1130), (x - 25, 1070), (x + 15, 1010), (x - 10, 950)], 8)
+    sparkle(p, 170, 600, 60, YELLOW)
+    sparkle(p, 1020, 560, 55, YELLOW)
+    sparkle(p, 200, 1450, 45, ORANGE)
+
+
+@scene("anpanman", 4, "纸杯蛋糕", "a big cupcake with swirly frosting, a cherry and sprinkles in a pleated paper wrapper")
+def anpanman_04(p):
+    p.ellipse(600, 1370, 330, 60, LSKY)
+    cupcake(p, 600, 1360, 2.0, SKY, PINK, RED)
+    for (x, y, a) in ((480, 890, 30), (580, 860, -40), (700, 880, 60), (630, 790, 10), (520, 770, -60), (690, 760, 45)):
+        p.line(rotate([(x - 18, y), (x + 18, y)], a, x, y), 10)
+    for (x, y, r) in ((180, 500, 60), (1020, 560, 55), (170, 1150, 50)):
+        p.star(x, y, r, YELLOW, rounded=True)
+
+
+@scene("anpanman", 5, "飞碟", "a friendly flying saucer with lights and a glowing beam among stars and a ringed planet")
+def anpanman_05(p):
+    p.poly([(470, 900), (730, 900), (900, 1450), (300, 1450)], LYELLOW)
+    p.chord(600, 820, 200, 210, 180, 360, LSKY)
+    p.ellipse(600, 850, 380, 110, PURPLE)
+    p.ellipse(600, 820, 250, 50, LPURPLE)
+    for k in range(5):
+        x = 360 + k * 120
+        y = 880 + 12 * (1 - abs(k - 2) / 2)
+        p.circle(x, y, 30, YELLOW)
+    p.circle(950, 300, 85, ORANGE)
+    p.ellipse(950, 300, 150, 32, PINK, rot=-15)
+    p.chord(950, 300, 85, 85, 180, 360, ORANGE, clip=None)
+    for (x, y, r) in ((180, 250, 50), (300, 520, 40), (1050, 760, 45), (150, 1150, 45)):
+        p.star(x, y, r, YELLOW, rounded=True)
+
+
+@scene("anpanman", 6, "面包工厂", "a cheerful bakery shop with a striped awning, bread in the display window, a chimney puffing smoke, flower pots and trees")
+def anpanman_06(p):
+    p.bg(LSKY)
+    sun(p, 1060, 160, 70, YELLOW, rays=10, ink_rays=True, ray_len=36)
+    cloud(p, 230, 170, 0.8)
+    cloud(p, 760, 230, 0.7, LGRAY)
+    cloud(p, 680, 330, 0.5, LGRAY)
+    p.rect(600, 380, 690, 560, BROWN)
+    p.band([(-10, 1300), (600, 1290), (1210, 1300)], 1620, LGRAY)
+    for x in (55, 1145):
+        p.rect(x - 22, 1000, x + 22, 1300, BROWN)
+        p.circle(x, 940, 95, GREEN)
+    p.rect(200, 620, 1000, 1300, PEACH)
+    p.poly([(170, 640), (600, 430), (1030, 640)], RED)
+    p.rect(400, 640, 800, 740, YELLOW, r=24)
+    p.smooth([(540, 715), (545, 680), (600, 660), (655, 680), (660, 715)], TAN, 6)
+    cols = [RED, WHITE] * 4
+    pts_top = 790
+    for k in range(8):
+        x0 = 200 + k * 100
+        p.poly([(x0, pts_top)] + [(x0 + 100, pts_top)] + ellipse_pts(x0 + 50, 860, 50, 40, 0, 0, 180, 12), cols[k])
+    p.rect(260, 930, 620, 1180, LSKY)
+    p.rect(250, 1180, 630, 1210, BROWN)
+    baguette(p, 370, 1120, 190, -20, TAN, LYELLOW, 2)
+    croissant(p, 520, 1130, 0.55)
+    p.circle(440, 1010, 45, TAN)
+    p.circle(560, 1010, 45, TAN)
+    p.rect(700, 940, 920, 1300, BROWN, r=16)
+    p.rect(740, 980, 880, 1080, LSKY, r=12)
+    p.dot(890, 1150, 9)
+    for x, c in ((150, PINK), (1050, PURPLE)):
+        p.poly([(x - 50, 1230), (x + 50, 1230), (x + 38, 1310), (x - 38, 1310)], ORANGE)
+        flower(p, x, 1150, 0.9, c, YELLOW, stem_len=80, leaf=None)
+
+
+@scene("anpanman", 7, "彩虹下的小镇", "a little town of houses under a big rainbow with clouds, sun, trees and birds")
+def anpanman_07(p):
+    p.bg(LSKY)
+    for k, c in enumerate((RED, ORANGE, YELLOW, GREEN, SKY, PURPLE)):
+        p.pie(600, 1000, 600 - k * 52, 600 - k * 52, 180, 360, c)
+    p.pie(600, 1000, 288, 288, 180, 360, 0)
+    sun(p, 1080, 150, 65, YELLOW, rays=8, ink_rays=True, ray_len=30)
+    cloud(p, 130, 900, 1.1)
+    cloud(p, 1070, 900, 1.1)
+    bird(p, 300, 200)
+    bird(p, 400, 260, 0.8)
+    p.band([(-10, 1060), (300, 1020), (600, 1050), (900, 1010), (1210, 1050)], 1620, LGREEN)
+    house(p, 260, 1300, 220, 180, PEACH, RED, BROWN, LSKY)
+    house(p, 600, 1260, 200, 170, LYELLOW, BLUE, RED, LSKY, chimney=False)
+    house(p, 940, 1310, 220, 180, LPINK, PURPLE, BROWN, LSKY)
+    round_tree(p, 430, 1580, 0.6, GREEN, BROWN, None)
+    round_tree(p, 780, 1585, 0.6, FOREST, BROWN, None)
+
+
+@scene("anpanman", 8, "野餐篮", "a woven picnic basket full of bread: a baguette, round rolls and a milk bottle, on a checkered blanket with apples")
+def anpanman_08(p):
+    p.bg(LGREEN)
+    q = [(60, 1000), (1140, 1000), (1200, 1600), (0, 1600)]
+    p.poly(q, BLUE)
+    for i in range(5):
+        for j in range(3):
+            if (i + j) % 2 == 0:
+                p.poly([quad_pt(q, i / 5, j / 3), quad_pt(q, (i + 1) / 5, j / 3),
+                        quad_pt(q, (i + 1) / 5, (j + 1) / 3), quad_pt(q, i / 5, (j + 1) / 3)], WHITE)
+    stroke(p, catmull([(260, 760), (330, 420), (600, 330), (870, 420), (940, 760)], False, 10), 50, BROWN)
+    baguette(p, 520, 620, 380, -55, TAN, LYELLOW, 3)
+    p.rect(700, 480, 820, 760, WHITE, r=30)
+    p.rect(715, 430, 805, 490, RED, r=10)
+    p.circle(380, 720, 80, TAN)
+    p.circle(600, 740, 70, LORANGE)
+    b = p.poly([(200, 760), (1000, 760), (920, 1200), (280, 1200)], TAN)
+    for y in (870, 980, 1090):
+        p.line([(150, y), (1050, y)], 7, clip=b)
+    for k in range(1, 6):
+        x0 = 200 + 800 * k / 6
+        x1 = 280 + 640 * k / 6
+        p.line([(x0, 760), (x1, 1200)], 7, clip=b)
+    p.rect(180, 740, 1020, 790, BROWN, r=20)
+    for (x, y, c) in ((150, 1350, RED), (1060, 1320, GREEN), (960, 1460, RED)):
+        p.circle(x, y, 60, c)
+        p.ellipse(x + 28, y - 70, 26, 12, GREEN if c == RED else FOREST, rot=-30)
+
+
+@scene("anpanman", 9, "面包店橱窗", "a bakery display case with shelves of breads: baguettes, croissants, donuts, cupcakes, a pretzel and rolls")
+def anpanman_09(p):
+    p.bg(LYELLOW)
+    p.rect(60, 120, 1140, 1520, BROWN, r=30)
+    back = p.rect(110, 170, 1090, 1470, LORANGE)
+    shelves = (560, 980, 1400)
+    for y in shelves:
+        p.rect(110, y, 1090, y + 40, TAN)
+    # top shelf: baguettes + croissant
+    baguette(p, 300, 470, 340, -12, TAN, LYELLOW, 3)
+    baguette(p, 330, 330, 300, -12, TAN, LYELLOW, 3)
+    croissant(p, 820, 440, 1.2)
+    # middle shelf: donuts
+    for x, c in ((260, PINK), (520, PURPLE), (780, SKY)):
+        donut(p, x, 870, 105, c, TAN, back)
+    p.circle(990, 900, 75, TAN)
+    # bottom shelf: cupcakes, pretzel
+    cupcake(p, 260, 1395, 0.85, SKY, PINK, RED, pleats=2)
+    cupcake(p, 520, 1395, 0.85, GREEN, LYELLOW, RED, pleats=2)
+    pretzel = catmull([(800, 1380), (720, 1250), (760, 1150), (850, 1170), (880, 1260), (920, 1340), (960, 1380),
+                       (1000, 1340), (1030, 1260), (1060, 1170), (1000, 1150), (920, 1180),
+                       (880, 1260), (840, 1340), (760, 1380)], False, 10)
+    stroke(p, [(x - 20, y) for x, y in pretzel], 46, BROWN)
+    p.rect(470, 40, 730, 130, RED, r=26)
+
+
+@scene("anpanman", 10, "小飞机巡逻", "a little propeller plane flying over a small town, pulling a banner, with clouds and the sun")
+def anpanman_10(p):
+    p.bg(LSKY)
+    sun(p, 1080, 150, 65, YELLOW, rays=10, ink_rays=True, ray_len=32)
+    cloud(p, 180, 200, 0.9)
+    cloud(p, 900, 560, 0.75)
+    cloud(p, 330, 760, 0.6)
+    p.line([(250, 420), (420, 420)], 6)
+    p.line([(250, 540), (420, 450)], 6)
+    p.poly([(40, 390), (260, 405), (260, 555), (40, 540)], YELLOW)
+    p.poly([(430, 400), (450, 250), (530, 260), (560, 400)], BLUE)
+    p.smooth([(420, 420), (520, 360), (760, 340), (900, 370), (950, 430), (900, 480), (700, 500), (480, 480)], RED)
+    p.ellipse(470, 455, 70, 22, BLUE, rot=-8)
+    p.smooth([(790, 360), (860, 365), (905, 410), (820, 415)], LSKY, 6)
+    for x in (560, 640, 720):
+        p.circle(x, 420, 22, WHITE)
+    p.poly([(620, 440), (780, 450), (700, 620), (590, 610)], BLUE)
+    p.ellipse(975, 430, 18, 105, LGRAY)
+    p.circle(960, 430, 24, YELLOW)
+    p.band([(-10, 1100), (300, 1060), (600, 1090), (900, 1050), (1210, 1090)], 1620, LGREEN)
+    house(p, 230, 1330, 220, 170, PEACH, RED, BROWN, LSKY)
+    house(p, 620, 1300, 200, 160, LYELLOW, BLUE, RED, LSKY, chimney=False)
+    house(p, 980, 1340, 220, 170, LPINK, PURPLE, BROWN, LSKY)
+    p.band([(-10, 1470), (400, 1450), (800, 1470), (1210, 1450)], 1620, LGRAY)
 
 
 # ===========================================================================
