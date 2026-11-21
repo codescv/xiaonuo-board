@@ -31,6 +31,7 @@ import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.data.Artwork
 import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.HomeTabs
+import dev.xiaonuoboard.app.update.UpdateUiState
 
 private const val PAGE_SIZE = 4 // 2×2 paged grid: no scrolling → no E-Ink smearing
 
@@ -46,6 +47,8 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
 ) {
     val works by container.artworks.works.collectAsState()
+    val updateState by container.updater.state.collectAsState()
+    val hasUpdate = updateState is UpdateUiState.Available || updateState is UpdateUiState.Ready
     val tab = HomeTabs.ALL[selectedTab.coerceIn(0, HomeTabs.ALL.lastIndex)]
     var pageIndex by remember(tab.id) { mutableIntStateOf(0) }
 
@@ -57,7 +60,7 @@ fun HomeScreen(
                 Text("选一张喜欢的画开始涂色吧", fontSize = 16.sp, color = Eink.Muted)
             }
             EinkButton("✨ AI 画坊 🔒") { onOpenAi() }
-            EinkButton("⚙️ 🔒") { onOpenSettings() }
+            EinkButton(if (hasUpdate) "⬆️ 新版 🔒" else "⚙️ 🔒", selected = hasUpdate) { onOpenSettings() }
         }
         // Tabs (two rows so every tab stays ≥ 56dp tall and readable)
         val rows = listOf(HomeTabs.ALL.take(4), HomeTabs.ALL.drop(4))

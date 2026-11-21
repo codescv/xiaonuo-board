@@ -43,9 +43,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        container.updater.checkOnStartupIfDue()
         setContent {
             XiaonuoTheme { XiaonuoApp(container) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        container.updater.onHostResume(this)
     }
 
     override fun onDestroy() {

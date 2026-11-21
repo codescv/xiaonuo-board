@@ -18,6 +18,7 @@ data class AppSettings(
     val stylusOnly: Boolean = false,
     val stayInsideLines: Boolean = true,
     val ghostUnderlay: Boolean = false,
+    val updateLastCheckMs: Long = 0L,
 ) {
     fun geminiConfig() = GeminiConfig(apiKey, baseUrl, model)
 }
@@ -42,6 +43,7 @@ class SettingsStore(context: Context) {
         stylusOnly = prefs.getBoolean(K_STYLUS, false),
         stayInsideLines = prefs.getBoolean(K_INSIDE, true),
         ghostUnderlay = prefs.getBoolean(K_GHOST, false),
+        updateLastCheckMs = prefs.getLong(K_UPDATE_CHECK, 0L),
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -55,6 +57,7 @@ class SettingsStore(context: Context) {
             .putBoolean(K_STYLUS, s.stylusOnly)
             .putBoolean(K_INSIDE, s.stayInsideLines)
             .putBoolean(K_GHOST, s.ghostUnderlay)
+            .putLong(K_UPDATE_CHECK, s.updateLastCheckMs)
             .apply()
         state.value = s
     }
@@ -68,5 +71,6 @@ class SettingsStore(context: Context) {
         const val K_STYLUS = "stylus_only"
         const val K_INSIDE = "stay_inside"
         const val K_GHOST = "ghost_underlay"
+        const val K_UPDATE_CHECK = "update_last_check_ms"
     }
 }

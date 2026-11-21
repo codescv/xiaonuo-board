@@ -7,6 +7,7 @@ import dev.xiaonuoboard.app.data.ArtworkRepository
 import dev.xiaonuoboard.app.data.PageRepository
 import dev.xiaonuoboard.app.data.SettingsStore
 import dev.xiaonuoboard.app.data.SoundFeedback
+import dev.xiaonuoboard.app.update.UpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,7 @@ class AppContainer(context: Context) {
     val gemini = GeminiImageClient({ settings.current.geminiConfig() })
     val aiPipeline = AiPipeline(gemini)
     val sound = SoundFeedback { settings.current.soundEnabled }
+    val updater = UpdateManager(appContext, settings)
     /** Outlives screens so auto-saves / exports finish even after navigating away. */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 }
