@@ -50,7 +50,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isFinishing) container.sound.release()
+        // The container (and its ToneGenerator) is owned by this activity instance.
+        container.sound.release()
     }
 }
 

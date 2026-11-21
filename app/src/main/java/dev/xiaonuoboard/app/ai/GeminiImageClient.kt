@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -105,12 +106,9 @@ class GeminiImageClient(
     fun generate(prompt: String, images: List<InlineImage> = emptyList(), aspectRatio: String? = "3:4"): GeminiResult {
         val cfg = configProvider()
         if (cfg.apiKey.isBlank()) throw GeminiException("请先在家长设置中填写 Gemini API Key")
-        val request = Request.Builder()
-            .url(cfg.generateContentUrl())
-            .header("x-goog-api-key", cfg.apiKey.trim())
-            .header("Content-Type", "application/json")
-            .post(buildRequestBody(prompt, images, aspectRatio).toRequestBody(JSON_MEDIA))
-            .build()
+        val request = buildRequest(cfg, cfg.generateContentUrl()) {
+            post(buildRequestBody(prompt, images, aspectRatio).toRequestBody(JSON_MEDIA))
+        }
         val response = try {
             http.newCall(request).execute()
         } catch (e: IOException) {
@@ -143,7 +141,14 @@ class GeminiImageClient(
                 if (inline != null) {
                     val data = inline["data"]?.jsonPrimitive?.contentOrNull ?: continue
                     val mime = (inline["mimeType"] ?: inline["mime_type"])?.jsonPrimitive?.contentOrNull ?: "image/png"
-                    images += InlineImage(mime, Base64.getDecoder().decode(data))
+                    val bytes = try {
+                        // Strip line wrapping emitted by some proxies, then decode strictly so corrupt data is rejected.
+                        Base64.getDecoder().decode(data.filterNot { it.isWhitespace() })
+                    } catch (e: IllegalArgumentException) {
+                        throw GeminiException("模型返回的图片数据损坏", cause = e)
+                    }
+                    if (bytes.isEmpty()) throw GeminiException("模型返回的图片数据为空")
+                    images += InlineImage(mime, bytes)
                 }
                 p["text"]?.jsonPrimitive?.contentOrNull?.let { sb.append(it) }
             }
@@ -158,11 +163,7 @@ class GeminiImageClient(
     fun testConnectivity(): String {
         val cfg = configProvider()
         if (cfg.apiKey.isBlank()) throw GeminiException("请先填写 API Key")
-        val request = Request.Builder()
-            .url("${cfg.normalizedBaseUrl}/v1beta/models/${cfg.normalizedModel}")
-            .header("x-goog-api-key", cfg.apiKey.trim())
-            .get()
-            .build()
+        val request = buildRequest(cfg, "${cfg.normalizedBaseUrl}/v1beta/models/${cfg.normalizedModel}") { get() }
         val response = try {
             http.newCall(request).execute()
         } catch (e: IOException) {
@@ -175,6 +176,18 @@ class GeminiImageClient(
                 json.parseToJsonElement(text).jsonObject["displayName"]?.jsonPrimitive?.contentOrNull
             }.getOrNull()
             return "连接成功 ✓ ${name ?: cfg.normalizedModel}"
+        }
+    }
+
+    /** Builds a request, mapping malformed URLs / header values to [GeminiException] instead of crashing. */
+    private fun buildRequest(cfg: GeminiConfig, url: String, method: Request.Builder.() -> Request.Builder): Request {
+        val key = cfg.apiKey.filterNot { it.isWhitespace() }
+        val httpUrl = url.toHttpUrlOrNull()
+            ?: throw GeminiException("Base URL 格式错误（需以 https:// 开头）：${cfg.normalizedBaseUrl}")
+        return try {
+            Request.Builder().url(httpUrl).header("x-goog-api-key", key).method().build()
+        } catch (e: IllegalArgumentException) {
+            throw GeminiException("API Key 含有非法字符", cause = e)
         }
     }
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,19 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiPipeline.Output?>(null) }
     var resultTitle by remember { mutableStateOf("") }
+
+    // Free large preview bitmaps whenever a result is replaced/cleared or the screen leaves.
+    DisposableEffect(result) {
+        val r = result
+        onDispose {
+            r?.line?.recycle()
+            r?.ref?.recycle()
+        }
+    }
+    DisposableEffect(photo) {
+        val p = photo
+        onDispose { p?.recycle() }
+    }
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {

@@ -168,6 +168,67 @@ class GeminiImageClientTest {
     }
 
     @Test
+    fun malformedBaseUrlBecomesGeminiExceptionNotCrash() {
+        for (bad in listOf("generativelanguage.googleapis.com", "ht tp://bad host", "ftp://x")) {
+            val c = GeminiImageClient({ GeminiConfig(apiKey = "k", baseUrl = bad) })
+            try {
+                c.generate("x"); fail("expected GeminiException for '$bad'")
+            } catch (e: GeminiException) {
+                assertTrue(e.message!!.contains("Base URL"))
+            }
+            try {
+                c.testConnectivity(); fail()
+            } catch (e: GeminiException) {
+                assertTrue(e.message!!.contains("Base URL"))
+            }
+        }
+    }
+
+    @Test
+    fun apiKeyWhitespaceAndNewlinesAreStripped() {
+        server.enqueue(imageResponse())
+        GeminiImageClient({ GeminiConfig(apiKey = " test-\nkey\r\n", baseUrl = server.url("/").toString()) }).generate("x")
+        assertEquals("test-key", server.takeRequest().getHeader("x-goog-api-key"))
+    }
+
+    @Test
+    fun nonAsciiApiKeyBecomesGeminiException() {
+        val c = GeminiImageClient({ GeminiConfig(apiKey = "密钥", baseUrl = server.url("/").toString()) })
+        try {
+            c.generate("x"); fail()
+        } catch (e: GeminiException) {
+            assertTrue(e.message!!.contains("API Key"))
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun mimeWrappedBase64FromProxyDecodes() {
+        val bytes = ByteArray(300) { it.toByte() }
+        val wrapped = Base64.getMimeEncoder().encodeToString(bytes).replace("\r\n", "\\r\\n")
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"candidates":[{"content":{"parts":[{"inline_data":{"mime_type":"image/png","data":"$wrapped"}}]}}]}""",
+            ),
+        )
+        assertArrayEquals(bytes, client().generate("x").firstImage.bytes)
+    }
+
+    @Test
+    fun corruptBase64IsGeminiException() {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"@@@###"}}]}}]}""",
+            ),
+        )
+        try {
+            client().generate("x"); fail()
+        } catch (e: GeminiException) {
+            assertTrue(e.message!!.isNotBlank())
+        }
+    }
+
+    @Test
     fun promptsDemandClosedPureBlackLines() {
         val p = PromptBuilder.combo(PromptBuilder.CHARACTERS[0], PromptBuilder.SCENES[0], PromptBuilder.Difficulty.EASY)
         assertTrue(p.contains("closed contour"))

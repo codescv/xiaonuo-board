@@ -57,6 +57,7 @@ import dev.xiaonuoboard.app.engine.Tool
 import dev.xiaonuoboard.app.ui.canvas.ColoringCanvasView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -71,7 +72,13 @@ private class CanvasSession(
     val ref: Bitmap?,
     val refThumb: Bitmap?,
     val recommended: List<Int>,
-)
+) {
+    fun recycle() {
+        lineOverlay.recycle()
+        refThumb?.takeIf { it !== ref }?.recycle()
+        ref?.recycle()
+    }
+}
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -129,8 +136,9 @@ fun CanvasScreen(
     controller.stayInsideLines = stayInside
     controller.stylusOnly = stylusOnly
 
-    fun saveNow(notifyNav: Boolean = true) {
-        val view = canvasView ?: return
+    fun saveNow(notifyNav: Boolean = true): Job? {
+        val view = canvasView ?: return null
+        if (view.paintBitmap.isRecycled) return null
         val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
         val progress = controller.progress()
         val existing = currentArtworkId
@@ -139,15 +147,25 @@ fun CanvasScreen(
             // Never touch navigation while the screen is being disposed (back already popped it).
             if (notifyNav) onArtworkCreated(it)
         }
-        container.appScope.launch {
-            val thumb = Bitmap.createScaledBitmap(BitmapIO.composite(snapshot, s.lineOverlay), 300, 400, true)
-            container.artworks.save(id, snapshot, thumb, progress)
-            ThumbCache.invalidate("file:${container.artworks.thumbFile(id).absolutePath}")
-        }
         if (progress >= 0.9f && !celebrated) {
             celebrated = true
             message = "🎉 太棒啦！这幅画快涂完啦！"
             container.sound.cheer()
+        }
+        return container.appScope.launch {
+            var composite: Bitmap? = null
+            var thumb: Bitmap? = null
+            try {
+                composite = BitmapIO.composite(snapshot, s.lineOverlay)
+                thumb = Bitmap.createScaledBitmap(composite, 300, 400, true)
+                container.artworks.save(id, snapshot, thumb, progress)
+                ThumbCache.invalidate("file:${container.artworks.thumbFile(id).absolutePath}")
+            } finally {
+                // Large 1200×1600 buffers: free eagerly (3 GB device).
+                if (thumb !== composite) thumb?.recycle()
+                composite?.recycle()
+                snapshot.recycle()
+            }
         }
     }
 
@@ -158,7 +176,14 @@ fun CanvasScreen(
     DisposableEffect(controller) {
         onDispose {
             controller.onCommitted = null
-            if (saveTicks.value > 0) saveNow(notifyNav = false)
+            val pending = if (saveTicks.value > 0) saveNow(notifyNav = false) else null
+            canvasView?.release()
+            canvasView = null
+            // Session bitmaps are freed only after the final save (which composites lineOverlay) finishes.
+            container.appScope.launch {
+                pending?.join()
+                s.recycle()
+            }
         }
     }
     fun pickFromRef(fx: Float, fy: Float) {
@@ -205,12 +230,18 @@ fun CanvasScreen(
                 message = "正在导出高清 PNG…"
                 scope.launch {
                     message = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val out = BitmapIO.composite(snapshot, s.lineOverlay)
+                        var out: Bitmap? = null
+                        try {
+                            out = BitmapIO.composite(snapshot, s.lineOverlay)
                             val where = GalleryExporter.exportPng(context, out, "${s.page.title}_${System.currentTimeMillis()}")
                             currentArtworkId?.let { container.artworks.markExported(it) }
                             "✓ 已保存到相册 $where"
-                        }.getOrElse { "导出失败：${it.message}" }
+                        } catch (e: Exception) {
+                            "导出失败：${e.message}"
+                        } finally {
+                            out?.recycle()
+                            snapshot.recycle()
+                        }
                     }
                 }
             }
@@ -351,14 +382,19 @@ private fun loadSession(container: AppContainer, pageId: String, artworkId: Stri
     val page = container.pages.findPage(pageId) ?: return null
     val lineRaw = BitmapIO.loadPageBitmap(ctx, page, ref = false) ?: return null
     val line = BitmapIO.fitToCanvas(lineRaw)
+    if (line !== lineRaw) lineRaw.recycle()
     val w = line.width
     val h = line.height
     val ink = BitmapIO.inkMask(line)
+    line.recycle()
     val overlay = BitmapIO.inkOverlay(ink, w, h)
-    val ref = BitmapIO.loadPageBitmap(ctx, page, ref = true)?.let { BitmapIO.fitToCanvas(it, w, h) }
+    val ref = BitmapIO.loadPageBitmap(ctx, page, ref = true)?.let { raw ->
+        BitmapIO.fitToCanvas(raw, w, h).also { if (it !== raw) raw.recycle() }
+    }
     val refThumb = ref?.let { Bitmap.createScaledBitmap(it, 300, 400, true) }
-    val paintBmp = artworkId?.let { container.artworks.loadPaint(it) }?.takeIf { it.width == w && it.height == h }
-    val paintPixels = paintBmp?.let { BitmapIO.pixels(it) }
+    val paintBmp = artworkId?.let { container.artworks.loadPaint(it) }
+    val paintPixels = paintBmp?.takeIf { it.width == w && it.height == h }?.let { BitmapIO.pixels(it) }
+    paintBmp?.recycle()
     val controller = ColoringCanvasController(w, h, ink, paintPixels)
     val extracted = ref?.let { PaletteExtractor.extract(BitmapIO.pixels(it), count = 6, stride = 5) }.orEmpty()
     val recommended = extracted.ifEmpty { page.palette }.ifEmpty { KaleidoPalette.CRAYONS.take(6).map { it.argb } }

@@ -2,7 +2,9 @@ package dev.xiaonuoboard.app.ui
 
 import androidx.compose.foundation.Indication
 import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,7 +54,7 @@ object NoOpIndication : IndicationNodeFactory {
     override fun equals(other: Any?) = other === this
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun XiaonuoTheme(content: @Composable () -> Unit) {
     val colors = lightColorScheme(
@@ -74,6 +76,8 @@ fun XiaonuoTheme(content: @Composable () -> Unit) {
         CompositionLocalProvider(
             LocalIndication provides NoOpIndication,
             LocalRippleConfiguration provides null,
+            // No overscroll stretch/glow animation on scrollable screens (E-Ink ghosting).
+            LocalOverscrollConfiguration provides null,
             content = content,
         )
     }

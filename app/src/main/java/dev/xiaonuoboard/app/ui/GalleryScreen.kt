@@ -113,12 +113,17 @@ fun ArtworkCard(
                 scope.launch {
                     message = "导出中…"
                     message = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val bmp = renderArtwork(container, art) ?: error("作品文件缺失")
+                        var bmp: Bitmap? = null
+                        try {
+                            bmp = renderArtwork(container, art) ?: error("作品文件缺失")
                             val where = GalleryExporter.exportPng(context, bmp, "${art.pageTitle}_${art.copyNo}_${art.updatedAt}")
                             container.artworks.markExported(art.id)
                             "已导出：$where"
-                        }.getOrElse { "导出失败：${it.message}" }
+                        } catch (e: Exception) {
+                            "导出失败：${e.message}"
+                        } finally {
+                            bmp?.recycle()
+                        }
                     }
                 }
             }
@@ -137,10 +142,19 @@ fun ArtworkCard(
 /** Full-resolution composite (white + paint + line art) of a saved artwork for export. */
 fun renderArtwork(container: AppContainer, art: Artwork): Bitmap? {
     val page = container.pages.findPage(art.pageId) ?: return null
-    val line = BitmapIO.loadPageBitmap(container.appContext, page, ref = false)?.let { BitmapIO.fitToCanvas(it) } ?: return null
+    val raw = BitmapIO.loadPageBitmap(container.appContext, page, ref = false) ?: return null
+    val line = BitmapIO.fitToCanvas(raw)
+    if (line !== raw) raw.recycle()
+    val w = line.width
+    val h = line.height
     val ink = BitmapIO.inkMask(line)
-    val overlay = BitmapIO.inkOverlay(ink, line.width, line.height)
-    val paint = container.artworks.loadPaint(art.id)
-        ?: Bitmap.createBitmap(line.width, line.height, Bitmap.Config.ARGB_8888)
-    return BitmapIO.composite(paint, overlay)
+    line.recycle()
+    val overlay = BitmapIO.inkOverlay(ink, w, h)
+    val paint = container.artworks.loadPaint(art.id) ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    return try {
+        BitmapIO.composite(paint, overlay)
+    } finally {
+        paint.recycle()
+        overlay.recycle()
+    }
 }

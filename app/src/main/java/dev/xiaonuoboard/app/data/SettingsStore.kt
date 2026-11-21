@@ -22,7 +22,10 @@ data class AppSettings(
     fun geminiConfig() = GeminiConfig(apiKey, baseUrl, model)
 }
 
-/** Parent settings persisted in private SharedPreferences (never leaves the device). */
+/**
+ * Parent settings persisted in private SharedPreferences (backup disabled in the manifest).
+ * The API key is encrypted at rest with an Android Keystore AES-GCM key ([SecretCipher]).
+ */
 class SettingsStore(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("xiaonuo_settings", Context.MODE_PRIVATE)
     private val state = MutableStateFlow(load())
@@ -31,7 +34,7 @@ class SettingsStore(context: Context) {
     val current: AppSettings get() = state.value
 
     private fun load() = AppSettings(
-        apiKey = prefs.getString(K_KEY, "") ?: "",
+        apiKey = SecretCipher.decrypt(prefs.getString(K_KEY, "") ?: ""),
         baseUrl = prefs.getString(K_BASE, GeminiModels.DEFAULT_BASE_URL) ?: GeminiModels.DEFAULT_BASE_URL,
         model = prefs.getString(K_MODEL, GeminiModels.DEFAULT) ?: GeminiModels.DEFAULT,
         einkMode = runCatching { EinkMode.valueOf(prefs.getString(K_EINK, EinkMode.REGAL.name)!!) }.getOrDefault(EinkMode.REGAL),
@@ -44,7 +47,7 @@ class SettingsStore(context: Context) {
     fun update(transform: (AppSettings) -> AppSettings) {
         val s = transform(state.value)
         prefs.edit()
-            .putString(K_KEY, s.apiKey)
+            .putString(K_KEY, SecretCipher.encrypt(s.apiKey))
             .putString(K_BASE, s.baseUrl)
             .putString(K_MODEL, s.model)
             .putString(K_EINK, s.einkMode.name)

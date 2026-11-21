@@ -39,6 +39,7 @@ import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.ParentGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /** Small LRU cache of decoded thumbnails (≈ 300×400) to keep paging instant and memory bounded. */
@@ -146,9 +147,9 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
                     .border(Eink.Border, Eink.Ink, Eink.Shape)
                     .pointerInput(Unit) {
                         detectTapGestures(onPress = {
-                            val start = System.currentTimeMillis()
-                            val released = withTimeoutOrNullCompat(ParentGate.LONG_PRESS_MILLIS) { tryAwaitRelease() }
-                            if (released == null && ParentGate.longPressUnlocks(System.currentTimeMillis() - start)) onUnlocked()
+                            // Timeout (null) ⇔ the finger was still down after LONG_PRESS_MILLIS (monotonic clock).
+                            val released = withTimeoutOrNull(ParentGate.LONG_PRESS_MILLIS) { tryAwaitRelease() }
+                            if (released == null) onUnlocked()
                         })
                     },
                 contentAlignment = Alignment.Center,
@@ -159,6 +160,3 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
         }
     }
 }
-
-private suspend fun <T> withTimeoutOrNullCompat(ms: Long, block: suspend () -> T): T? =
-    kotlinx.coroutines.withTimeoutOrNull(ms) { block() }

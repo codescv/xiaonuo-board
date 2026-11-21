@@ -57,11 +57,14 @@ class ColoringCanvasController(
         require(paint.size == width * height)
     }
 
-    /** Whether a pointer of [kind] should be accepted by the current tool. */
+    /**
+     * Whether a pointer of [kind] should be accepted by the current tool. In 仅笔 mode anything that
+     * is not positively identified as a pen (finger, palm, unknown tool type) is rejected for drawing.
+     */
     fun accepts(kind: PointerKind): Boolean = when (tool) {
         // The paint bucket is a deliberate single tap → both pen and finger are allowed.
         Tool.FILL -> true
-        Tool.CRAYON, Tool.ERASER -> !(stylusOnly && kind == PointerKind.FINGER)
+        Tool.CRAYON, Tool.ERASER -> !stylusOnly || kind == PointerKind.STYLUS || kind == PointerKind.ERASER_TIP || kind == PointerKind.MOUSE
     }
 
     fun tapFill(x: Int, y: Int, fillColor: Int = color): DirtyRect {

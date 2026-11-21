@@ -63,8 +63,13 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
             val page = withContext(Dispatchers.Default) {
                 runCatching {
                     val bmp = BitmapIO.decodeUri(context, uri) ?: error("无法读取图片")
-                    val out = AiPipeline.importLocal(bmp)
-                    container.pages.saveCustomPage("导入 · ${System.currentTimeMillis() % 100000}", out.line, out.ref, "imported", out.regions)
+                    val out = try { AiPipeline.importLocal(bmp) } finally { bmp.recycle() }
+                    try {
+                        container.pages.saveCustomPage("导入 · ${System.currentTimeMillis() % 100000}", out.line, out.ref, "imported", out.regions)
+                    } finally {
+                        out.line.recycle()
+                        out.ref?.recycle()
+                    }
                 }
             }
             page.onSuccess { onImported(it.id) }.onFailure { importStatus = "导入失败：${it.message}" }

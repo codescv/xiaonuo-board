@@ -139,9 +139,10 @@ object OnyxEinkBridge {
     fun enterScribble(view: View, strokeWidth: Float, limit: Rect?): Boolean {
         if (!isAvailable) return false
         val ok = invokeStatic(method("enterScribbleMode", View::class.java), view)
+        if (!ok) return false
         invokeStatic(method("setStrokeWidth", Float::class.javaPrimitiveType!!), strokeWidth)
         invokeStatic(method("setStrokeColor", Int::class.javaPrimitiveType!!), 0xFF000000.toInt())
-        if (ok && limit != null) {
+        if (limit != null) {
             // Optional on older firmware; failure is non-fatal.
             invokeStatic(
                 method("setScreenHandWritingRegionLimit", View::class.java, IntArray::class.java),

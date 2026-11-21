@@ -10,20 +10,19 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.DirtyRect
+import dev.xiaonuoboard.app.engine.InputRouter
 import dev.xiaonuoboard.app.engine.PointerKind
-import dev.xiaonuoboard.app.engine.Tool
-import kotlin.math.hypot
 
 /**
  * Native coloring surface. Composites (bottom→top): white paper → optional 20% reference ghost →
- * paint layer → 1-bit black line art. Handles tap-to-fill, crayon/eraser strokes, stylus/finger
- * separation, pinch-zoom/pan (1×–3×) and BOOX partial / fast refreshes.
+ * paint layer → 1-bit black line art. Pointer routing (pen priority, palm rejection, pinch/pan,
+ * stylus-only) lives in the JVM-tested [InputRouter]; this view only adapts MotionEvents, draws,
+ * and drives BOOX partial / fast refreshes and the hardware scribble preview.
  */
 @SuppressLint("ViewConstructor")
 class ColoringCanvasView(
@@ -48,45 +47,65 @@ class ColoringCanvasView(
     var onGhostHint: ((Boolean) -> Unit)? = null
 
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val linePaint = Paint() // no filtering: keep 1-bit lines crisp at integer zooms
+    private val linePaint = Paint() // no filtering: keep 1-bit lines crisp
     private val ghostPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 51 } // ~20%
     private val borderPaint = Paint().apply { color = 0xFF111111.toInt(); style = Paint.Style.STROKE; strokeWidth = 4f }
+    private val canvasRect = Rect(0, 0, cw, ch)
 
     private val baseMatrix = Matrix()
     private val viewMatrix = Matrix()
     private val inverse = Matrix()
+    private val matrixValues = FloatArray(9)
+    private var viewScale = 1f
     var zoom = 1f
         private set
     private var panX = 0f
     private var panY = 0f
 
-    private val pts = FloatArray(2)
-    private var downX = 0f
-    private var downY = 0f
-    private var tapCandidate = false
-    private var stroking = false
-    private var panning = false
-    private var lastPanX = 0f
-    private var lastPanY = 0f
-    private var multiTouch = false
-    private var hwPreview = false
     private var strokesSinceFull = 0
+    private var hwPreview = false
+    private var stroking = false
+    private val screenLoc = IntArray(2)
+    private val tmpRect = RectF()
 
-    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScale(d: ScaleGestureDetector): Boolean {
-            val newZoom = (zoom * d.scaleFactor).coerceIn(MIN_ZOOM, MAX_ZOOM)
-            val f = newZoom / zoom
-            // Zoom about the focal point.
-            panX = d.focusX - (d.focusX - panX) * f
-            panY = d.focusY - (d.focusY - panY) * f
-            zoom = newZoom
-            clampPan()
-            updateMatrix()
-            onZoomChanged?.invoke(zoom)
-            invalidate()
-            return true
-        }
-    })
+    private val router = InputRouter(
+        controller = controller,
+        listener = object : InputRouter.Listener {
+            override fun onTransform(scale: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) {
+                applyTransform(scale, focusX, focusY, dx, dy)
+            }
+
+            override fun onStrokeStart(kind: PointerKind, x: Float, y: Float, pressure: Float, time: Long) {
+                stroking = true
+                if (kind == PointerKind.STYLUS || kind == PointerKind.ERASER_TIP) startHwPreview(x, y, pressure, time)
+            }
+
+            override fun onStrokePoint(x: Float, y: Float, pressure: Float, time: Long) {
+                if (hwPreview) OnyxEinkBridge.strokeAdd(strokeWidthPx(), x + screenLoc[0], y + screenLoc[1], pressure, 1f, time)
+            }
+
+            override fun onStrokeEnd(rect: DirtyRect, x: Float, y: Float, pressure: Float, time: Long, cancelled: Boolean) {
+                stopHwPreview(x, y, pressure, time, cancelled)
+                stroking = false
+                // One clean (non-FAST) refresh of the whole stroke in color, after the scribble layer is gone.
+                if (!rect.isEmpty) refreshCanvasRect(rect, EinkMode.NORMAL)
+                if (!cancelled) {
+                    strokesSinceFull++
+                    onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
+                    onStrokeFinished?.invoke()
+                }
+            }
+
+            override fun onFilled(rect: DirtyRect) {
+                strokesSinceFull++
+                onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
+                onFilled?.invoke()
+            }
+        },
+        toCanvas = { p -> inverse.mapPoints(p) },
+        tapSlop = TAP_SLOP_PX,
+        palmTouchMajor = PALM_TOUCH_MAJOR_PX,
+    )
 
     init {
         setBackgroundColor(Color.WHITE)
@@ -108,15 +127,26 @@ class ColoringCanvasView(
         OnyxEinkBridge.clearGhosting(this)
     }
 
-    /** Copies changed paint pixels into the display bitmap and schedules a partial refresh. */
-    private fun syncRect(r: DirtyRect, mode: EinkMode = EinkMode.NORMAL) {
+    /** Releases the large display bitmap; call once the view has left the window. */
+    fun release() {
+        controller.onDirty = null
+        if (!paintBitmap.isRecycled) paintBitmap.recycle()
+    }
+
+    /** Copies changed paint pixels into the display bitmap; refreshes unless the BOOX scribble layer owns the screen. */
+    private fun syncRect(r: DirtyRect) {
         val c = r.clamp(cw, ch)
-        if (c.isEmpty) return
+        if (c.isEmpty || paintBitmap.isRecycled) return
         paintBitmap.setPixels(controller.paint, c.top * cw + c.left, cw, c.left, c.top, c.width, c.height)
-        val screen = RectF(c.left.toFloat(), c.top.toFloat(), c.right.toFloat(), c.bottom.toFloat())
-        viewMatrix.mapRect(screen)
-        val rect = Rect(screen.left.toInt() - 2, screen.top.toInt() - 2, screen.right.toInt() + 2, screen.bottom.toInt() + 2)
-        OnyxEinkBridge.refreshRect(this, rect, if (stroking) EinkMode.FAST else mode)
+        if (hwPreview) return // the hardware pen layer is showing the trace; refresh once on pen-up
+        refreshCanvasRect(c, if (stroking) EinkMode.FAST else EinkMode.NORMAL)
+    }
+
+    private fun refreshCanvasRect(c: DirtyRect, mode: EinkMode) {
+        tmpRect.set(c.left.toFloat(), c.top.toFloat(), c.right.toFloat(), c.bottom.toFloat())
+        viewMatrix.mapRect(tmpRect)
+        val rect = Rect(tmpRect.left.toInt() - 2, tmpRect.top.toInt() - 2, tmpRect.right.toInt() + 2, tmpRect.bottom.toInt() + 2)
+        OnyxEinkBridge.refreshRect(this, rect, mode)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -135,6 +165,20 @@ class ColoringCanvasView(
         viewMatrix.postScale(zoom, zoom)
         viewMatrix.postTranslate(panX, panY)
         viewMatrix.invert(inverse)
+        viewMatrix.getValues(matrixValues)
+        viewScale = matrixValues[Matrix.MSCALE_X]
+    }
+
+    private fun applyTransform(scale: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) {
+        val newZoom = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        val f = newZoom / zoom
+        panX = focusX - (focusX - panX) * f + dx
+        panY = focusY - (focusY - panY) * f + dy
+        zoom = newZoom
+        clampPan()
+        updateMatrix()
+        if (scale != 1f) onZoomChanged?.invoke(zoom)
+        invalidate()
     }
 
     private fun clampPan() {
@@ -146,23 +190,18 @@ class ColoringCanvasView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (paintBitmap.isRecycled) return
         canvas.drawColor(Color.WHITE)
         canvas.save()
         canvas.concat(viewMatrix)
-        if (ghostVisible) refBitmap?.let { canvas.drawBitmap(it, null, Rect(0, 0, cw, ch), ghostPaint) }
+        if (ghostVisible) refBitmap?.takeIf { !it.isRecycled }?.let { canvas.drawBitmap(it, null, canvasRect, ghostPaint) }
         canvas.drawBitmap(paintBitmap, 0f, 0f, bitmapPaint)
         canvas.drawBitmap(lineOverlay, 0f, 0f, linePaint)
         canvas.drawRect(0f, 0f, cw.toFloat(), ch.toFloat(), borderPaint)
         canvas.restore()
     }
 
-    private fun toCanvas(x: Float, y: Float): FloatArray {
-        pts[0] = x; pts[1] = y
-        inverse.mapPoints(pts)
-        return pts
-    }
-
-    private fun kindOf(e: MotionEvent, index: Int = 0): PointerKind = when (e.getToolType(index)) {
+    private fun kindOf(e: MotionEvent, index: Int): PointerKind = when (e.getToolType(index)) {
         MotionEvent.TOOL_TYPE_STYLUS -> PointerKind.STYLUS
         MotionEvent.TOOL_TYPE_ERASER -> PointerKind.ERASER_TIP
         MotionEvent.TOOL_TYPE_FINGER -> PointerKind.FINGER
@@ -170,122 +209,48 @@ class ColoringCanvasView(
         else -> PointerKind.UNKNOWN
     }
 
-    /** Palm rejection heuristic: very large contact area finger touches are ignored. */
-    private fun isPalm(e: MotionEvent): Boolean =
-        e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && e.getTouchMajor(0) > PALM_TOUCH_MAJOR_PX
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        // Pinch / two-finger pan is always allowed with fingers.
-        if (e.pointerCount > 1 || multiTouch) scaleDetector.onTouchEvent(e)
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                multiTouch = false
-                downX = e.x; downY = e.y
-                val kind = kindOf(e)
-                if (isPalm(e)) return true
-                tapCandidate = controller.tool == Tool.FILL
-                if (controller.tool != Tool.FILL) {
-                    if (controller.accepts(kind)) {
-                        val p = toCanvas(e.x, e.y)
-                        stroking = controller.strokeBegin(p[0], p[1], kind)
-                        if (stroking && kind == PointerKind.STYLUS) startHwPreview(e)
-                    } else if (zoom > 1f) {
-                        // 仅笔模式 + finger → pan instead of drawing.
-                        panning = true; lastPanX = e.x; lastPanY = e.y
-                    }
-                }
-                return true
-            }
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                multiTouch = true
-                tapCandidate = false
-                if (stroking && kindOf(e) == PointerKind.FINGER) {
-                    controller.strokeCancel(); stroking = false; stopHwPreview(e, cancel = true)
-                }
-                panning = true
-                lastPanX = midX(e); lastPanY = midY(e)
-                return true
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                val i = e.actionIndex
+                router.down(e.getPointerId(i), kindOf(e, i), e.getX(i), e.getY(i), e.getTouchMajor(i), e.getPressure(i), e.eventTime)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (stroking) {
-                    for (h in 0 until e.historySize) {
-                        val p = toCanvas(e.getHistoricalX(h), e.getHistoricalY(h))
-                        controller.strokeMove(p[0], p[1])
-                        if (hwPreview) OnyxEinkBridge.strokeAdd(strokeWidthPx(), e.getHistoricalX(h), e.getHistoricalY(h), e.getHistoricalPressure(h), 1f, e.eventTime)
-                    }
-                    val p = toCanvas(e.x, e.y)
-                    controller.strokeMove(p[0], p[1])
-                    if (hwPreview) OnyxEinkBridge.strokeAdd(strokeWidthPx(), e.x, e.y, e.pressure, 1f, e.eventTime)
-                } else if (panning) {
-                    val mx = if (e.pointerCount > 1) midX(e) else e.x
-                    val my = if (e.pointerCount > 1) midY(e) else e.y
-                    if (zoom > 1f) {
-                        panX += mx - lastPanX; panY += my - lastPanY
-                        clampPan(); updateMatrix(); invalidate()
-                    }
-                    lastPanX = mx; lastPanY = my
-                } else if (tapCandidate && hypot(e.x - downX, e.y - downY) > TAP_SLOP_PX) {
-                    tapCandidate = false
-                }
-                return true
-            }
-            MotionEvent.ACTION_POINTER_UP -> {
-                val remaining = if (e.actionIndex == 0) 1 else 0
-                lastPanX = e.getX(remaining); lastPanY = e.getY(remaining)
-                return true
-            }
-            MotionEvent.ACTION_UP -> {
-                if (stroking) {
-                    stopHwPreview(e, cancel = false)
-                    stroking = false
-                    val r = controller.strokeEnd()
-                    // Commit the stroke in color with a clean (non-FAST) partial refresh.
-                    syncRect(r, EinkMode.NORMAL)
-                    strokesSinceFull++
-                    onStrokeFinished?.invoke()
-                } else if (tapCandidate && !multiTouch) {
-                    val p = toCanvas(e.x, e.y)
-                    if (p[0] in 0f..cw.toFloat() && p[1] in 0f..ch.toFloat()) {
-                        val r = controller.tapFill(p[0].toInt(), p[1].toInt())
-                        if (!r.isEmpty) {
-                            strokesSinceFull++
-                            onFilled?.invoke()
-                        }
+                for (h in 0 until e.historySize) {
+                    for (i in 0 until e.pointerCount) {
+                        router.move(e.getPointerId(i), e.getHistoricalX(i, h), e.getHistoricalY(i, h), e.getHistoricalPressure(i, h), e.getHistoricalEventTime(h))
                     }
                 }
-                tapCandidate = false; panning = false; multiTouch = false
-                onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
-                return true
+                for (i in 0 until e.pointerCount) {
+                    router.move(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
+                }
             }
-            MotionEvent.ACTION_CANCEL -> {
-                if (stroking) { controller.strokeCancel(); stopHwPreview(e, cancel = true) }
-                stroking = false; tapCandidate = false; panning = false; multiTouch = false
-                return true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                val i = e.actionIndex
+                router.up(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
             }
+            MotionEvent.ACTION_CANCEL -> router.cancel()
+            else -> return super.onTouchEvent(e)
         }
-        return super.onTouchEvent(e)
+        return true
     }
 
-    private fun midX(e: MotionEvent) = if (e.pointerCount > 1) (e.getX(0) + e.getX(1)) / 2f else e.x
-    private fun midY(e: MotionEvent) = if (e.pointerCount > 1) (e.getY(0) + e.getY(1)) / 2f else e.y
+    private fun strokeWidthPx(): Float = controller.brushSize.radius * 2f * viewScale
 
-    private fun strokeWidthPx(): Float {
-        val scale = FloatArray(9).also { viewMatrix.getValues(it) }[Matrix.MSCALE_X]
-        return controller.brushSize.radius * 2f * scale
-    }
-
-    private fun startHwPreview(e: MotionEvent) {
+    /** BOOX scribble API works in SCREEN coordinates → offset view-local points by the view's location. */
+    private fun startHwPreview(x: Float, y: Float, pressure: Float, time: Long) {
         if (!OnyxEinkBridge.isAvailable) return
-        val loc = IntArray(2).also { getLocationOnScreen(it) }
-        hwPreview = OnyxEinkBridge.enterScribble(this, strokeWidthPx(), Rect(loc[0], loc[1], loc[0] + width, loc[1] + height)) &&
-            OnyxEinkBridge.strokeStart(strokeWidthPx(), e.x, e.y, e.pressure, 1f, e.eventTime)
+        getLocationOnScreen(screenLoc)
+        val limit = Rect(screenLoc[0], screenLoc[1], screenLoc[0] + width, screenLoc[1] + height)
+        hwPreview = OnyxEinkBridge.enterScribble(this, strokeWidthPx(), limit) &&
+            OnyxEinkBridge.strokeStart(strokeWidthPx(), x + screenLoc[0], y + screenLoc[1], pressure, 1f, time)
         if (!hwPreview) OnyxEinkBridge.leaveScribble(this)
     }
 
-    private fun stopHwPreview(e: MotionEvent, cancel: Boolean) {
+    private fun stopHwPreview(x: Float, y: Float, pressure: Float, time: Long, cancel: Boolean) {
         if (!hwPreview) return
-        if (!cancel) OnyxEinkBridge.strokeFinish(strokeWidthPx(), e.x, e.y, e.pressure, 1f, e.eventTime)
+        if (!cancel) OnyxEinkBridge.strokeFinish(strokeWidthPx(), x + screenLoc[0], y + screenLoc[1], pressure, 1f, time)
         OnyxEinkBridge.leaveScribble(this)
         hwPreview = false
     }
