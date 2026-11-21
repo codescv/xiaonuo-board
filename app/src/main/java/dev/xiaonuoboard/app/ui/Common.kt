@@ -59,8 +59,12 @@ object ThumbCache {
 fun PageThumb(page: ColoringPage, ref: Boolean, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val key = "page:${page.id}:$ref"
-    val bmp by produceState(ThumbCache.get(key), key) {
-        if (value == null) {
+    val bmp by produceState<Bitmap?>(ThumbCache.get(key), key) {
+        val cached = ThumbCache.get(key)
+        if (cached != null) {
+            value = cached
+        } else {
+            value = null
             value = withContext(Dispatchers.IO) {
                 BitmapIO.loadPageBitmap(context, page, ref, sample = if (ref) 8 else 4)?.also { ThumbCache.put(key, it) }
             }
@@ -72,8 +76,12 @@ fun PageThumb(page: ColoringPage, ref: Boolean, modifier: Modifier = Modifier) {
 @Composable
 fun FileThumb(file: File, version: Long, modifier: Modifier = Modifier) {
     val key = "file:${file.absolutePath}:$version"
-    val bmp by produceState(ThumbCache.get(key), key) {
-        if (value == null) {
+    val bmp by produceState<Bitmap?>(ThumbCache.get(key), key) {
+        val cached = ThumbCache.get(key)
+        if (cached != null) {
+            value = cached
+        } else {
+            value = null
             value = withContext(Dispatchers.IO) {
                 if (file.exists()) BitmapIO.decode(file.inputStream())?.also { ThumbCache.put(key, it) } else null
             }

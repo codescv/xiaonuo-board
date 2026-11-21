@@ -46,6 +46,7 @@ class ColoringCanvasView(
     /** true once enough partial refreshes accumulated that the ✨ 清残影 button should be highlighted. */
     var onGhostHint: ((Boolean) -> Unit)? = null
 
+    private val bgPaint = Paint().apply { color = Color.WHITE; style = Paint.Style.FILL }
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val linePaint = Paint() // no filtering: keep 1-bit lines crisp
     private val ghostPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 51 } // ~20%
@@ -191,8 +192,9 @@ class ColoringCanvasView(
 
     override fun onDraw(canvas: Canvas) {
         if (paintBitmap.isRecycled || lineOverlay.isRecycled) return
-        canvas.drawColor(Color.WHITE)
         canvas.save()
+        canvas.clipRect(0, 0, width, height)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         canvas.concat(viewMatrix)
         if (ghostVisible) refBitmap?.takeIf { !it.isRecycled }?.let { canvas.drawBitmap(it, null, canvasRect, ghostPaint) }
         canvas.drawBitmap(paintBitmap, 0f, 0f, bitmapPaint)
