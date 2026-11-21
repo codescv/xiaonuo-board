@@ -33,46 +33,82 @@ class DirtyRectUndoStack(
     private val tilesX = (width + tileSize - 1) / tileSize
     private val tilesY = (height + tileSize - 1) / tileSize
     private val entries = ArrayDeque<Entry>()
-    private var pending: HashMap<Int, Tile>? = null
-    private var pendingRect: DirtyRect = DirtyRect.EMPTY
+
+    // Pending action state. capture() runs for every brush sample on the UI thread, so it is kept
+    // allocation-free: an index-addressed tile table (no boxed HashMap keys), the touched-tile list,
+    // and the pending bounds as plain ints instead of a fresh DirtyRect per union.
+    private var actionOpen = false
+    private val pendingTiles = arrayOfNulls<Tile>(tilesX * tilesY)
+    private val touched = ArrayList<Tile>()
+    private var pendL = 0
+    private var pendT = 0
+    private var pendR = 0
+    private var pendB = 0
+    /** Worst-case RLE scratch buffer (one 2-int run per pixel), reused for every tile encode. */
+    private val rleScratch = IntArray(tileSize * tileSize * 2)
 
     var totalBytes: Long = 0
         private set
 
     val size: Int get() = entries.size
     val canUndo: Boolean get() = entries.isNotEmpty()
-    val inAction: Boolean get() = pending != null
+    val inAction: Boolean get() = actionOpen
+
+    /** Number of tiles snapshotted so far in the open action (diagnostics / tests). */
+    val pendingTileCount: Int get() = touched.size
 
     fun beginAction() {
-        pending = HashMap()
-        pendingRect = DirtyRect.EMPTY
+        resetPending()
+        actionOpen = true
     }
 
     /** Snapshots every not-yet-captured tile that intersects [rect]. Must be called BEFORE writing. */
-    fun capture(rect: DirtyRect) {
-        val p = pending ?: return
-        val r = rect.clamp(width, height)
-        if (r.isEmpty) return
-        pendingRect = pendingRect.union(r)
-        val tx0 = r.left / tileSize
-        val tx1 = (r.right - 1) / tileSize
-        val ty0 = r.top / tileSize
-        val ty1 = (r.bottom - 1) / tileSize
-        for (ty in ty0..ty1) for (tx in tx0..tx1) {
-            val key = ty * tilesX + tx
-            if (!p.containsKey(key)) p[key] = Tile(tx, ty, encodeTile(tx, ty))
+    fun capture(rect: DirtyRect) = capture(rect.left, rect.top, rect.right, rect.bottom)
+
+    /** Allocation-free variant of [capture] for hot paths (`[left, right) x [top, bottom)`). */
+    fun capture(left: Int, top: Int, right: Int, bottom: Int) {
+        if (!actionOpen) return
+        val l = left.coerceIn(0, width)
+        val t = top.coerceIn(0, height)
+        val r = right.coerceIn(0, width)
+        val b = bottom.coerceIn(0, height)
+        if (r <= l || b <= t) return
+        if (touched.isEmpty() && pendR <= pendL) {
+            pendL = l; pendT = t; pendR = r; pendB = b
+        } else {
+            if (l < pendL) pendL = l
+            if (t < pendT) pendT = t
+            if (r > pendR) pendR = r
+            if (b > pendB) pendB = b
+        }
+        val tx0 = l / tileSize
+        val tx1 = (r - 1) / tileSize
+        val ty0 = t / tileSize
+        val ty1 = (b - 1) / tileSize
+        for (ty in ty0..ty1) {
+            val rowKey = ty * tilesX
+            for (tx in tx0..tx1) {
+                val key = rowKey + tx
+                if (pendingTiles[key] == null) {
+                    val tile = Tile(tx, ty, encodeTile(tx, ty))
+                    pendingTiles[key] = tile
+                    touched.add(tile)
+                }
+            }
         }
     }
 
     /** Finishes the action. Returns false (and discards it) if the action touched nothing or changed nothing. */
     fun commitAction(): Boolean {
-        val p = pending ?: return false
-        pending = null
-        if (p.isEmpty()) return false
+        if (!actionOpen) return false
+        val captured = ArrayList(touched)
+        val rect = if (pendR > pendL && pendB > pendT) DirtyRect(pendL, pendT, pendR, pendB) else DirtyRect.EMPTY
+        resetPending()
+        if (captured.isEmpty()) return false
         // Drop tiles whose content did not change (e.g. filling a region with its current color).
-        val changed = p.values.filter { !tileUnchanged(it) }
+        val changed = captured.filter { !tileUnchanged(it) }
         if (changed.isEmpty()) return false
-        val entry = Entry(changed, pendingRect)
+        val entry = Entry(changed, rect)
         entries.addLast(entry)
         totalBytes += entry.bytes
         trim()
@@ -80,12 +116,19 @@ class DirtyRectUndoStack(
     }
 
     fun cancelAction() {
-        pending = null
+        resetPending()
+    }
+
+    private fun resetPending() {
+        for (t in touched) pendingTiles[t.ty * tilesX + t.tx] = null
+        touched.clear()
+        actionOpen = false
+        pendL = 0; pendT = 0; pendR = 0; pendB = 0
     }
 
     /** Restores the most recent action. Returns the dirty rect to redraw, or null when nothing to undo. */
     fun undo(): DirtyRect? {
-        if (pending != null) commitAction()
+        if (actionOpen) commitAction()
         val e = entries.removeLastOrNull() ?: return null
         totalBytes -= e.bytes
         var rect = DirtyRect.EMPTY
@@ -98,7 +141,7 @@ class DirtyRectUndoStack(
 
     fun clear() {
         entries.clear()
-        pending = null
+        resetPending()
         totalBytes = 0
     }
 
@@ -118,7 +161,7 @@ class DirtyRectUndoStack(
     /** RLE as pairs (runLength, argb). */
     private fun encodeTile(tx: Int, ty: Int): IntArray {
         val r = tileRect(tx, ty)
-        val out = IntArray(r.width * r.height * 2)
+        val out = rleScratch
         var n = 0
         var runColor = 0
         var runLen = 0

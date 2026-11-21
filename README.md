@@ -18,10 +18,10 @@ Toolchain: Gradle 8.10.2, AGP 8.7.1, Kotlin 2.0.21, Compose BOM 2024.10.01, comp
 | Package | Contents |
 | --- | --- |
 | `eink/` | `OnyxEinkBridge`: reflection-safe `EpdController` access (NORMAL / REGAL / FAST / full-refresh ghost clearing, partial-rect refresh, scribble-mode stylus preview), with a graceful fallback on non-BOOX devices |
-| `engine/` | Pure Kotlin, unit-tested on the JVM. `RegionMapEngine` (morphological closing plus scanline union-find labeling), `FloodFill` (O(1) region lookup, 1px bleed under the lines), `CrayonBrush` (stays inside the lines), `DirtyRectUndoStack` (64px tiles with RLE, 20 steps or 15 MB, whichever is hit first), `PaletteExtractor` (top-6 colors from 4096 bins), `RefAligner`, `ColoringCanvasController` |
+| `engine/` | Pure Kotlin, unit-tested on the JVM. `RegionMapEngine` (morphological closing plus scanline union-find labeling), `FloodFill` (O(1) region lookup, 1px bleed under the lines), `CrayonBrush` (stays inside the lines), `DirtyRectUndoStack` (64px tiles with RLE, 20 steps or 15 MB, whichever is hit first; allocation-free per-sample capture), `DirtyTileSet` (per-frame dirty-tile tracking for GPU uploads), `PaletteExtractor` (top-6 colors from 4096 bins), `RefAligner`, `ColoringCanvasController` |
 | `ai/` | `GeminiImageClient` (direct `v1beta …:generateContent` call, `x-goog-api-key`, custom Base URL proxy, default model `gemini-nano-banana-2.1`), `PromptBuilder`, `LineArtSanitizer` (adaptive binarization, speckle removal, gap closing, QC), `AiPipeline` (3 steps) |
 | `data/` | Manifest model, `PageRepository` (built-in packs, AI cache in `filesDir/ai_packs/`, imports), `ArtworkRepository` (auto-save, multiple copies per template), `GalleryExporter` (MediaStore → `Pictures/小诺画板/`), `SettingsStore`, `ParentGate`, `SoundFeedback` (silent by default) |
-| `ui/` | Zero-animation Compose theme (`NoOpIndication`, 2dp `#111111` borders, `#F8F8F5` paper, touch targets ≥56dp), `HomeScreen`, `CanvasScreen` + `ColoringCanvasView`, `AiWorkshopScreen`, `GalleryScreen`, `SettingsScreen`, `ParentGateDialog` |
+| `ui/` | Zero-animation Compose theme (`NoOpIndication`, 2dp `#111111` borders, `#F8F8F5` paper, touch targets ≥56dp), `HomeScreen`, `CanvasScreen` + `ColoringCanvasView` (tiled paint layer: only the tiles a stroke touches are re-uploaded; one coalesced invalidate / EPD partial refresh per frame; auto-save encodes off the UI thread), `AiWorkshopScreen`, `GalleryScreen`, `SettingsScreen`, `ParentGateDialog` |
 
 ## Built-in packs
 

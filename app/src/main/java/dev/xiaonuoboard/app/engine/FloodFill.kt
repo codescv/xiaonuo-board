@@ -11,8 +11,16 @@ object FloodFill {
 
     /**
      * Fills region [regionId] of [paint] (ARGB, row-major, same size as [map]) with [color].
-     * @param beforeWrite invoked with the rect about to be mutated (used by the undo stack).
-     * @return the dirty rect, or [DirtyRect.EMPTY] if nothing changed.
+     *
+     * Only pixels whose value actually changes are written: each row is scanned once into a scratch
+     * list, then [beforeWrite] is invoked with that row's changed span *before* the row is mutated.
+     * The undo stack therefore snapshots only tiles that really change (re-filling a region, or a
+     * huge background region whose bounding box spans the whole page, no longer captures and RLE-
+     * encodes hundreds of untouched tiles on the UI thread).
+     *
+     * @param beforeWrite invoked (possibly many times, once per changed row) with the rect about to
+     *   be mutated (used by the undo stack).
+     * @return the tight bounding rect of changed pixels, or [DirtyRect.EMPTY] if nothing changed.
      */
     fun fill(
         map: RegionMap,
@@ -27,23 +35,56 @@ object FloodFill {
         val h = map.height
         val labels = map.labels
         val rect = map.bounds[regionId].inset(bleed).clamp(w, h)
-        beforeWrite?.invoke(rect)
+        if (rect.isEmpty) return DirtyRect.EMPTY
+        val xs = IntArray(rect.width)
+        var minX = Int.MAX_VALUE
+        var minY = Int.MAX_VALUE
+        var maxX = -1
+        var maxY = -1
         for (y in rect.top until rect.bottom) {
             val row = y * w
+            var n = 0
             for (x in rect.left until rect.right) {
                 val i = row + x
+                if (paint[i] == color) continue
                 val l = labels[i]
-                if (l == regionId) {
-                    paint[i] = color
-                } else if (l == RegionMap.BOUNDARY && bleed > 0 && touchesRegion(labels, w, h, x, y, regionId, bleed)) {
-                    paint[i] = color
+                if (l == regionId ||
+                    (l == RegionMap.BOUNDARY && bleed > 0 && touchesRegion(labels, w, h, x, y, regionId, bleed))
+                ) {
+                    xs[n++] = x
                 }
             }
+            if (n == 0) continue
+            val first = xs[0]
+            val last = xs[n - 1]
+            beforeWrite?.invoke(DirtyRect(first, y, last + 1, y + 1))
+            for (k in 0 until n) paint[row + xs[k]] = color
+            if (first < minX) minX = first
+            if (last > maxX) maxX = last
+            if (y < minY) minY = y
+            maxY = y
         }
-        return rect
+        return if (maxX < 0) DirtyRect.EMPTY else DirtyRect(minX, minY, maxX + 1, maxY + 1)
     }
 
     private fun touchesRegion(labels: IntArray, w: Int, h: Int, x: Int, y: Int, id: Int, r: Int): Boolean {
+        if (r == 1) {
+            // Fast path for the default 1px bleed: unrolled 8-neighbourhood, no nested loops.
+            val i = y * w + x
+            val hasL = x > 0
+            val hasR = x < w - 1
+            if (hasL && labels[i - 1] == id) return true
+            if (hasR && labels[i + 1] == id) return true
+            if (y > 0) {
+                val u = i - w
+                if (labels[u] == id || (hasL && labels[u - 1] == id) || (hasR && labels[u + 1] == id)) return true
+            }
+            if (y < h - 1) {
+                val d = i + w
+                if (labels[d] == id || (hasL && labels[d - 1] == id) || (hasR && labels[d + 1] == id)) return true
+            }
+            return false
+        }
         val y0 = maxOf(0, y - r)
         val y1 = minOf(h - 1, y + r)
         val x0 = maxOf(0, x - r)

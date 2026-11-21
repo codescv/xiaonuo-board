@@ -44,35 +44,53 @@ object OnyxEinkBridge {
         m.contains("onyx") || b.contains("onyx") || b.contains("boox") || loadClass(LEGACY_EPD_CONTROLLER) != null
     }
 
-    private val methodCache = HashMap<String, Method?>()
-
     private fun loadClass(name: String): Class<*>? = try {
         Class.forName(name)
     } catch (_: Throwable) {
         null
     }
 
-    private fun method(name: String, vararg params: Class<*>): Method? {
-        val key = name + params.joinToString(prefix = "(", postfix = ")") { it.name }
-        return synchronized(methodCache) {
-            methodCache.getOrPut(key) {
-                try {
-                    epdClass?.getMethod(name, *params)
-                } catch (_: Throwable) {
-                    null
-                }
-            }
+    private fun method(name: String, vararg params: Class<*>): Method? = try {
+        epdClass?.getMethod(name, *params)
+    } catch (_: Throwable) {
+        null
+    }
+
+    private val F = Float::class.javaPrimitiveType!!
+    private val I = Int::class.javaPrimitiveType!!
+
+    // Hot-path reflection targets are resolved ONCE. Previously every call (including one per stylus
+    // sample for addStrokePoint, and one per refresh) rebuilt a signature string with joinToString,
+    // took a lock, and cloned the UpdateMode enum array via Class.getEnumConstants().
+    private val mSetViewDefault: Method? by lazy { updateModeClass?.let { method("setViewDefaultUpdateMode", View::class.java, it) } }
+    private val mInvalidateView: Method? by lazy { updateModeClass?.let { method("invalidate", View::class.java, it) } }
+    private val mInvalidateRect: Method? by lazy { updateModeClass?.let { method("invalidate", View::class.java, I, I, I, I, it) } }
+    private val mRepaintAll: Method? by lazy { updateModeClass?.let { method("repaintEveryThing", it) } }
+    private val mEnterScribble: Method? by lazy { method("enterScribbleMode", View::class.java) }
+    private val mLeaveScribble: Method? by lazy { method("leaveScribbleMode", View::class.java) }
+    private val mSetStrokeWidth: Method? by lazy { method("setStrokeWidth", F) }
+    private val mSetStrokeColor: Method? by lazy { method("setStrokeColor", I) }
+    private val mSetRegionLimit: Method? by lazy { method("setScreenHandWritingRegionLimit", View::class.java, IntArray::class.java) }
+    private val mStartStroke: Method? by lazy { method("startStroke", F, F, F, F, F, F) }
+    private val mAddStrokePoint: Method? by lazy { method("addStrokePoint", F, F, F, F, F, F) }
+    private val mFinishStroke: Method? by lazy { method("finishStroke", F, F, F, F, F, F) }
+
+    /** Onyx UpdateMode constant per [EinkMode] (index = ordinal), resolved once. */
+    private val updateModes: Array<Any?> by lazy {
+        val constants = updateModeClass?.enumConstants
+        Array(EinkMode.entries.size) { idx ->
+            constants?.let { resolveUpdateMode(EinkMode.entries[idx], it) }
         }
     }
 
-    private fun updateMode(mode: EinkMode): Any? {
-        val cls = updateModeClass ?: return null
-        val constants = cls.enumConstants ?: return null
+    private fun resolveUpdateMode(mode: EinkMode, constants: Array<out Any>): Any? {
         for (n in mode.onyxNames) {
             constants.firstOrNull { (it as Enum<*>).name == n }?.let { return it }
         }
         return null
     }
+
+    private fun updateMode(mode: EinkMode): Any? = if (updateModeClass == null) null else updateModes[mode.ordinal]
 
     private fun invokeStatic(m: Method?, vararg args: Any?): Boolean {
         if (m == null) return false
@@ -88,30 +106,20 @@ object OnyxEinkBridge {
     /** Sets the default waveform for a view (e.g. REGAL for browsing pages). */
     fun setViewDefaultMode(view: View, mode: EinkMode): Boolean {
         val um = updateMode(mode) ?: return false
-        val cls = updateModeClass ?: return false
-        return invokeStatic(method("setViewDefaultUpdateMode", View::class.java, cls), view, um)
+        return invokeStatic(mSetViewDefault, view, um)
     }
 
     /** Refreshes a view with a given waveform; falls back to `invalidate()`. */
     fun refresh(view: View, mode: EinkMode = EinkMode.NORMAL) {
         val um = updateMode(mode)
-        val cls = updateModeClass
-        if (um != null && cls != null && invokeStatic(method("invalidate", View::class.java, cls), view, um)) return
+        if (um != null && invokeStatic(mInvalidateView, view, um)) return
         view.invalidate()
     }
 
     /** Partial refresh of a screen-space rect (after a fill/stroke). */
     fun refreshRect(view: View, rect: Rect, mode: EinkMode = EinkMode.NORMAL) {
         val um = updateMode(mode)
-        val cls = updateModeClass
-        if (um != null && cls != null) {
-            val m = method(
-                "invalidate", View::class.java,
-                Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!,
-                Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, cls,
-            )
-            if (invokeStatic(m, view, rect.left, rect.top, rect.right, rect.bottom, um)) return
-        }
+        if (um != null && invokeStatic(mInvalidateRect, view, rect.left, rect.top, rect.right, rect.bottom, um)) return
         // Rect-scoped invalidate is deprecated (HW-accelerated views redraw fully anyway); BOOX handles
         // the partial waveform above, everything else just redraws.
         view.invalidate()
@@ -120,10 +128,9 @@ object OnyxEinkBridge {
     /** 「✨ 清残影」: one full GC flash to clear accumulated ghosting. */
     fun clearGhosting(view: View) {
         val um = updateMode(EinkMode.FULL)
-        val cls = updateModeClass
-        if (um != null && cls != null) {
-            if (invokeStatic(method("repaintEveryThing", cls), um)) return
-            if (invokeStatic(method("invalidate", View::class.java, cls), view, um)) return
+        if (um != null) {
+            if (invokeStatic(mRepaintAll, um)) return
+            if (invokeStatic(mInvalidateView, view, um)) return
         }
         // Non-BOOX fallback: plain redraw (LCDs have no ghosting).
         view.invalidate()
@@ -138,35 +145,30 @@ object OnyxEinkBridge {
      */
     fun enterScribble(view: View, strokeWidth: Float, limit: Rect?): Boolean {
         if (!isAvailable) return false
-        val ok = invokeStatic(method("enterScribbleMode", View::class.java), view)
+        val ok = invokeStatic(mEnterScribble, view)
         if (!ok) return false
-        invokeStatic(method("setStrokeWidth", Float::class.javaPrimitiveType!!), strokeWidth)
-        invokeStatic(method("setStrokeColor", Int::class.javaPrimitiveType!!), 0xFF000000.toInt())
+        invokeStatic(mSetStrokeWidth, strokeWidth)
+        invokeStatic(mSetStrokeColor, 0xFF000000.toInt())
         if (limit != null) {
             // Optional on older firmware; failure is non-fatal.
-            invokeStatic(
-                method("setScreenHandWritingRegionLimit", View::class.java, IntArray::class.java),
-                view, intArrayOf(limit.left, limit.top, limit.right, limit.bottom),
-            )
+            invokeStatic(mSetRegionLimit, view, intArrayOf(limit.left, limit.top, limit.right, limit.bottom))
         }
         return ok
     }
 
     fun leaveScribble(view: View) {
         if (!isAvailable) return
-        invokeStatic(method("leaveScribbleMode", View::class.java), view)
+        invokeStatic(mLeaveScribble, view)
     }
 
-    private val F = Float::class.javaPrimitiveType!!
-
     fun strokeStart(baseWidth: Float, x: Float, y: Float, pressure: Float, size: Float, time: Long): Boolean =
-        isAvailable && invokeStatic(method("startStroke", F, F, F, F, F, F), baseWidth, x, y, pressure, size, time.toFloat())
+        isAvailable && invokeStatic(mStartStroke, baseWidth, x, y, pressure, size, time.toFloat())
 
     fun strokeAdd(baseWidth: Float, x: Float, y: Float, pressure: Float, size: Float, time: Long): Boolean =
-        isAvailable && invokeStatic(method("addStrokePoint", F, F, F, F, F, F), baseWidth, x, y, pressure, size, time.toFloat())
+        isAvailable && invokeStatic(mAddStrokePoint, baseWidth, x, y, pressure, size, time.toFloat())
 
     fun strokeFinish(baseWidth: Float, x: Float, y: Float, pressure: Float, size: Float, time: Long): Boolean =
-        isAvailable && invokeStatic(method("finishStroke", F, F, F, F, F, F), baseWidth, x, y, pressure, size, time.toFloat())
+        isAvailable && invokeStatic(mFinishStroke, baseWidth, x, y, pressure, size, time.toFloat())
 
     /**
      * Onyx `TouchHelper` (pen SDK) probe. `TouchHelper.create(View, RawInputCallback)` requires a

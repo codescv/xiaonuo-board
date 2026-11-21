@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
+import dev.xiaonuoboard.app.eink.RefreshCoalescer
 import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.DirtyRect
 import dev.xiaonuoboard.app.engine.InputRouter
@@ -23,6 +24,14 @@ import dev.xiaonuoboard.app.engine.PointerKind
  * paint layer → 1-bit black line art. Pointer routing (pen priority, palm rejection, pinch/pan,
  * stylus-only) lives in the JVM-tested [InputRouter]; this view only adapts MotionEvents, draws,
  * and drives BOOX partial / fast refreshes and the hardware scribble preview.
+ *
+ * Latency notes:
+ *  - The paint layer is a [TiledPaintLayer]: only tiles touched since the last frame are copied and
+ *    re-uploaded to the GPU (instead of the whole 7.7 MB bitmap per brush sample / frame).
+ *  - Refreshes are coalesced through [RefreshCoalescer] into ONE invalidate / EPD partial refresh per
+ *    display frame, however many stylus samples arrived in that frame.
+ *  - Strokes request unbuffered input dispatch so samples reach the brush (and the BOOX hardware
+ *    pen layer) as soon as the digitizer reports them instead of being batched to the next vsync.
  */
 @SuppressLint("ViewConstructor")
 class ColoringCanvasView(
@@ -33,7 +42,7 @@ class ColoringCanvasView(
 
     private val cw = controller.width
     private val ch = controller.height
-    val paintBitmap: Bitmap = Bitmap.createBitmap(cw, ch, Bitmap.Config.ARGB_8888)
+    private val paintLayer = TiledPaintLayer(controller.paint, cw, ch)
 
     var refBitmap: Bitmap? = null
         set(value) { field = value; invalidate() }
@@ -42,6 +51,8 @@ class ColoringCanvasView(
 
     var onFilled: (() -> Unit)? = null
     var onStrokeFinished: (() -> Unit)? = null
+    /** Fired after EVERY stroke end, committed or cancelled (e.g. to run an auto-save deferred mid-stroke). */
+    var onStrokeEnded: (() -> Unit)? = null
     var onZoomChanged: ((Float) -> Unit)? = null
     /** true once enough partial refreshes accumulated that the ✨ 清残影 button should be highlighted. */
     var onGhostHint: ((Boolean) -> Unit)? = null
@@ -66,8 +77,15 @@ class ColoringCanvasView(
     private var strokesSinceFull = 0
     private var hwPreview = false
     private var stroking = false
+    /** Union of everything the current stroke changed (incl. a cancel's rollback) → one clean refresh at the end. */
+    private var strokeDirty = DirtyRect.EMPTY
     private val screenLoc = IntArray(2)
     private val tmpRect = RectF()
+    private val refreshes = RefreshCoalescer()
+    private val flushRefresh = Runnable { flushPendingRefresh() }
+
+    /** True while a crayon / eraser stroke is in progress (callers defer heavy work until it ends). */
+    val isStroking: Boolean get() = stroking
 
     private val router = InputRouter(
         controller = controller,
@@ -88,13 +106,18 @@ class ColoringCanvasView(
             override fun onStrokeEnd(rect: DirtyRect, x: Float, y: Float, pressure: Float, time: Long, cancelled: Boolean) {
                 stopHwPreview(x, y, pressure, time, cancelled)
                 stroking = false
-                // One clean (non-FAST) refresh of the whole stroke in color, after the scribble layer is gone.
-                if (!rect.isEmpty) refreshCanvasRect(rect, EinkMode.NORMAL)
+                // One clean (non-FAST) refresh of the whole stroke in color, after the scribble layer is
+                // gone. Uses the union of everything synced during the stroke so a cancelled stroke's
+                // rollback (reported with an empty rect) is also repainted cleanly, not left in DU/scribble.
+                val all = strokeDirty.union(rect.clamp(cw, ch))
+                strokeDirty = DirtyRect.EMPTY
+                if (!all.isEmpty) requestRefresh(all, EinkMode.NORMAL)
                 if (!cancelled) {
                     strokesSinceFull++
                     onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
                     onStrokeFinished?.invoke()
                 }
+                onStrokeEnded?.invoke()
             }
 
             override fun onFilled(rect: DirtyRect) {
@@ -110,7 +133,6 @@ class ColoringCanvasView(
 
     init {
         setBackgroundColor(Color.WHITE)
-        paintBitmap.setPixels(controller.paint, 0, cw, 0, 0, cw, ch)
         controller.onDirty = { r -> syncRect(r) }
         isFocusable = true
     }
@@ -128,19 +150,46 @@ class ColoringCanvasView(
         OnyxEinkBridge.clearGhosting(this)
     }
 
-    /** Releases the large display bitmap; call once the view has left the window. */
+    val isReleased: Boolean get() = paintLayer.isReleased
+
+    /**
+     * Copy of the current paint pixels (unpremultiplied ARGB, row-major `width × height`) for
+     * auto-save / export. A plain array copy (~2 ms) is the only UI-thread cost; turning it into a
+     * Bitmap, compositing and PNG encoding all happen on a background thread.
+     */
+    fun snapshotPixels(): IntArray = controller.paint.copyOf()
+
+    /** Releases the display tiles; call once the view has left the window. */
     fun release() {
         controller.onDirty = null
-        if (!paintBitmap.isRecycled) paintBitmap.recycle()
+        removeCallbacks(flushRefresh)
+        refreshes.clear()
+        paintLayer.release()
     }
 
-    /** Copies changed paint pixels into the display bitmap; refreshes unless the BOOX scribble layer owns the screen. */
+    /**
+     * Marks changed paint pixels for upload (done once per frame in [onDraw]) and queues a coalesced
+     * refresh, unless the BOOX scribble layer owns the screen (then we refresh once on pen-up).
+     */
     private fun syncRect(r: DirtyRect) {
+        if (paintLayer.isReleased) return
         val c = r.clamp(cw, ch)
-        if (c.isEmpty || paintBitmap.isRecycled) return
-        paintBitmap.setPixels(controller.paint, c.top * cw + c.left, cw, c.left, c.top, c.width, c.height)
+        if (c.isEmpty) return
+        paintLayer.markDirty(c)
+        if (stroking) strokeDirty = strokeDirty.union(c)
         if (hwPreview) return // the hardware pen layer is showing the trace; refresh once on pen-up
-        refreshCanvasRect(c, if (stroking) EinkMode.FAST else EinkMode.NORMAL)
+        requestRefresh(c, if (stroking) EinkMode.FAST else EinkMode.NORMAL)
+    }
+
+    /** Queues [c] (canvas coords) for the next frame's single partial refresh. */
+    private fun requestRefresh(c: DirtyRect, mode: EinkMode) {
+        if (refreshes.request(c, mode)) postOnAnimation(flushRefresh)
+    }
+
+    private fun flushPendingRefresh() {
+        val batch = refreshes.drain() ?: return
+        if (paintLayer.isReleased) return
+        refreshCanvasRect(batch.rect, batch.mode)
     }
 
     private fun refreshCanvasRect(c: DirtyRect, mode: EinkMode) {
@@ -191,13 +240,13 @@ class ColoringCanvasView(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (paintBitmap.isRecycled || lineOverlay.isRecycled) return
+        if (paintLayer.isReleased || lineOverlay.isRecycled) return
         canvas.save()
         canvas.clipRect(0, 0, width, height)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         canvas.concat(viewMatrix)
         if (ghostVisible) refBitmap?.takeIf { !it.isRecycled }?.let { canvas.drawBitmap(it, null, canvasRect, ghostPaint) }
-        canvas.drawBitmap(paintBitmap, 0f, 0f, bitmapPaint)
+        paintLayer.draw(canvas, bitmapPaint)
         canvas.drawBitmap(lineOverlay, 0f, 0f, linePaint)
         canvas.drawRect(0f, 0f, cw.toFloat(), ch.toFloat(), borderPaint)
         canvas.restore()
@@ -217,6 +266,10 @@ class ColoringCanvasView(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
                 router.down(e.getPointerId(i), kindOf(e, i), e.getX(i), e.getY(i), e.getTouchMajor(i), e.getPressure(i), e.eventTime)
+                // Deliver the rest of a stroke's samples immediately instead of batching them to vsync:
+                // up to one frame less input latency for the brush and the BOOX hardware pen trace.
+                // Rendering stays one upload + one refresh per frame thanks to the coalescing above.
+                if (router.mode == InputRouter.Mode.STROKE) requestUnbufferedDispatch(e)
             }
             MotionEvent.ACTION_MOVE -> {
                 for (h in 0 until e.historySize) {

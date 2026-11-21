@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Everything needed to color one artwork, loaded off the main thread. */
 private class CanvasSession(
@@ -128,6 +129,8 @@ fun CanvasScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var celebrated by remember { mutableStateOf(false) }
     val saveTicks = remember { MutableStateFlow(0) }
+    /** An auto-save fired mid-stroke; it is re-queued as soon as that stroke ends. */
+    val saveDeferred = remember { AtomicBoolean(false) }
     var canvasView by remember { mutableStateOf<ColoringCanvasView?>(null) }
 
     // Push UI state into the engine.
@@ -137,26 +140,44 @@ fun CanvasScreen(
     controller.stayInsideLines = stayInside
     controller.stylusOnly = stylusOnly
 
+    /**
+     * Auto-save. The UI thread only copies the paint IntArray (~2 ms); the progress scan, Bitmap
+     * creation, compositing and PNG encoding run on [AppContainer.appScope] (IO). A save that comes
+     * due while the child is mid-stroke is deferred to the end of that stroke so it never steals
+     * UI-thread time from the pen.
+     */
     fun saveNow(notifyNav: Boolean = true): Job? {
         val view = canvasView ?: return null
-        if (view.paintBitmap.isRecycled) return null
-        val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
-        val progress = controller.progress()
+        if (view.isReleased) return null
+        if (notifyNav && view.isStroking) {
+            saveDeferred.set(true)
+            return null
+        }
+        saveDeferred.set(false)
+        val pixels = view.snapshotPixels()
         val existing = currentArtworkId
         val id = existing ?: container.artworks.create(s.page).id.also {
             currentArtworkId = it
             // Never touch navigation while the screen is being disposed (back already popped it).
             if (notifyNav) onArtworkCreated(it)
         }
-        if (progress >= 0.9f && !celebrated) {
-            celebrated = true
-            message = "🎉 太棒啦！这幅画快涂完啦！"
-            container.sound.cheer()
-        }
+        val mayCelebrate = notifyNav && !celebrated
         return ioJobs.track(container.appScope.launch {
+            val progress = controller.progress(pixels)
+            if (mayCelebrate && progress >= 0.9f) {
+                withContext(Dispatchers.Main) {
+                    if (!celebrated) {
+                        celebrated = true
+                        message = "🎉 太棒啦！这幅画快涂完啦！"
+                        container.sound.cheer()
+                    }
+                }
+            }
+            var snapshot: Bitmap? = null
             var composite: Bitmap? = null
             var thumb: Bitmap? = null
             try {
+                snapshot = Bitmap.createBitmap(pixels, controller.width, controller.height, Bitmap.Config.ARGB_8888)
                 composite = BitmapIO.composite(snapshot, s.lineOverlay)
                 thumb = Bitmap.createScaledBitmap(composite, 300, 400, true)
                 container.artworks.save(id, snapshot, thumb, progress)
@@ -165,7 +186,7 @@ fun CanvasScreen(
                 // Large 1200×1600 buffers: free eagerly (3 GB device).
                 if (thumb !== composite) thumb?.recycle()
                 composite?.recycle()
-                snapshot.recycle()
+                snapshot?.recycle()
             }
         })
     }
@@ -236,13 +257,16 @@ fun CanvasScreen(
                 m,
                 onClick = {
                     val view = canvasView ?: return@EinkIconButton
+                    if (view.isReleased) return@EinkIconButton
                     saveNow()
-                    val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    val pixels = view.snapshotPixels()
                     message = "正在导出高清 PNG…"
                     ioJobs.track(container.appScope.launch {
                         val result = run {
+                            var snapshot: Bitmap? = null
                             var out: Bitmap? = null
                             try {
+                                snapshot = Bitmap.createBitmap(pixels, controller.width, controller.height, Bitmap.Config.ARGB_8888)
                                 out = BitmapIO.composite(snapshot, s.lineOverlay)
                                 val where = GalleryExporter.exportPng(context, out, "${s.page.title}_${System.currentTimeMillis()}")
                                 currentArtworkId?.let { container.artworks.markExported(it) }
@@ -251,7 +275,7 @@ fun CanvasScreen(
                                 "导出失败：${e.message}"
                             } finally {
                                 out?.recycle()
-                                snapshot.recycle()
+                                snapshot?.recycle()
                             }
                         }
                         withContext(Dispatchers.Main) { message = result }
@@ -305,6 +329,8 @@ fun CanvasScreen(
                             v.onFilled = { container.sound.fill() }
                             v.onZoomChanged = { zoom = it }
                             v.onGhostHint = { ghostHint = it }
+                            // Re-queue (debounced) an auto-save that was deferred because it came due mid-stroke.
+                            v.onStrokeEnded = { if (saveDeferred.getAndSet(false)) saveTicks.value = saveTicks.value + 1 }
                             canvasView = v
                         }
                     },

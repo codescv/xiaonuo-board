@@ -34,6 +34,8 @@ class ColoringCanvasController(
     val paint: IntArray = initialPaint?.copyOf() ?: IntArray(width * height)
     val undoStack = DirtyRectUndoStack(paint, width, height)
     private val brush = CrayonBrush(regionMap, paint)
+    /** Single undo-capture hook instance, so per-sample brush/fill calls do not allocate a closure. */
+    private val captureHook: (DirtyRect) -> Unit = { undoStack.capture(it) }
 
     var tool: Tool = Tool.CRAYON
     var brushSize: BrushSize = BrushSize.MEDIUM
@@ -71,7 +73,7 @@ class ColoringCanvasController(
         val id = regionMap.regionNear(x, y)
         if (id == RegionMap.BOUNDARY) return DirtyRect.EMPTY
         undoStack.beginAction()
-        val rect = FloodFill.fill(regionMap, id, fillColor, paint, bleed = 1) { undoStack.capture(it) }
+        val rect = FloodFill.fill(regionMap, id, fillColor, paint, bleed = 1, beforeWrite = captureHook)
         return finishAction(rect)
     }
 
@@ -82,14 +84,14 @@ class ColoringCanvasController(
         brush.color = if (erasing) CrayonBrush.ERASE_COLOR else color
         undoStack.beginAction()
         strokeActive = true
-        strokeRect = brush.begin(x, y, stayInsideLines) { undoStack.capture(it) }
+        strokeRect = brush.begin(x, y, stayInsideLines, captureHook)
         if (!strokeRect.isEmpty) onDirty?.invoke(strokeRect)
         return true
     }
 
     fun strokeMove(x: Float, y: Float): DirtyRect {
         if (!strokeActive) return DirtyRect.EMPTY
-        val r = brush.moveTo(x, y) { undoStack.capture(it) }
+        val r = brush.moveTo(x, y, captureHook)
         strokeRect = strokeRect.union(r)
         if (!r.isEmpty) onDirty?.invoke(r)
         return r
@@ -135,20 +137,32 @@ class ColoringCanvasController(
         return finishAction(full)
     }
 
-    /** Fraction of fillable regions (ignoring tiny specks) that carry any paint. */
-    fun progress(): Float {
-        var total = 0
-        var painted = 0
-        val counted = BooleanArray(regionMap.regionCount + 1)
-        val big = BooleanArray(regionMap.regionCount + 1) { it > 0 && regionMap.areas[it] >= 200 }
-        for (id in 1..regionMap.regionCount) if (big[id]) total++
+    /** Regions that count towards [progress] (ignoring tiny specks); depends only on the immutable region map. */
+    private val bigRegions: BooleanArray by lazy {
+        BooleanArray(regionMap.regionCount + 1) { it > 0 && regionMap.areas[it] >= PROGRESS_MIN_AREA }
+    }
+    private val bigRegionCount: Int by lazy { bigRegions.count { it } }
+
+    /**
+     * Fraction of fillable regions (ignoring tiny specks) that carry any paint.
+     *
+     * Pure read of [pixels] + the immutable [regionMap], so it is safe to call from a background
+     * thread on a snapshot (`paint.copyOf()`), keeping the full-canvas scan off the UI thread.
+     */
+    fun progress(pixels: IntArray = paint): Float {
+        require(pixels.size == width * height)
+        val total = bigRegionCount
         if (total == 0) return 0f
+        val big = bigRegions
+        val counted = BooleanArray(regionMap.regionCount + 1)
+        var painted = 0
         val labels = regionMap.labels
-        for (i in paint.indices) {
+        for (i in pixels.indices) {
             val id = labels[i]
-            if (id != 0 && big[id] && !counted[id] && (paint[i] ushr 24) != 0) {
+            if (id != 0 && big[id] && !counted[id] && (pixels[i] ushr 24) != 0) {
                 counted[id] = true
                 painted++
+                if (painted == total) break
             }
         }
         return painted.toFloat() / total
@@ -161,5 +175,9 @@ class ColoringCanvasController(
         onDirty?.invoke(rect)
         onCommitted?.invoke()
         return rect
+    }
+
+    companion object {
+        const val PROGRESS_MIN_AREA = 200
     }
 }
