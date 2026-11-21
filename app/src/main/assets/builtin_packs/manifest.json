@@ -71,14 +71,14 @@
    "difficulty": "easy",
    "line": "elsa/elsa_03_line.png",
    "ref": "elsa/elsa_03_ref.webp",
-   "regions": 80,
+   "regions": 53,
    "palette": [
-    "#6CCCFC",
-    "#0C54B4",
-    "#B42484",
-    "#84CCCC",
-    "#E4843C",
-    "#FCB49C"
+    "#B4E4FC",
+    "#24549C",
+    "#CC8424",
+    "#840C54",
+    "#FCCCB4",
+    "#9C2484"
    ]
   },
   {
@@ -107,14 +107,14 @@
    "difficulty": "easy",
    "line": "elsa/elsa_05_line.png",
    "ref": "elsa/elsa_05_ref.webp",
-   "regions": 85,
+   "regions": 57,
    "palette": [
     "#B4E4FC",
+    "#543C24",
     "#3C5454",
-    "#3C3C24",
-    "#6C243C",
     "#FCB46C",
-    "#B49C54"
+    "#CC9C3C",
+    "#6C6C3C"
    ]
   },
   {
@@ -125,14 +125,14 @@
    "difficulty": "standard",
    "line": "elsa/elsa_06_line.png",
    "ref": "elsa/elsa_06_ref.webp",
-   "regions": 250,
+   "regions": 50,
    "palette": [
-    "#CCE4FC",
-    "#243C9C",
-    "#B46C3C",
-    "#246C3C",
-    "#845424",
-    "#9C2484"
+    "#0C3C9C",
+    "#CC6C24",
+    "#9C2484",
+    "#FCCCB4",
+    "#6C0C3C",
+    "#84CCCC"
    ]
   },
   {
@@ -143,14 +143,14 @@
    "difficulty": "standard",
    "line": "elsa/elsa_07_line.png",
    "ref": "elsa/elsa_07_ref.webp",
-   "regions": 242,
+   "regions": 68,
    "palette": [
     "#9C6C3C",
-    "#548454",
-    "#CC9C54",
-    "#6CB4E4",
-    "#B43C84",
-    "#FCCCB4"
+    "#E49C54",
+    "#FCB49C",
+    "#B42484",
+    "#24549C",
+    "#CC2424"
    ]
   },
   {
@@ -161,14 +161,14 @@
    "difficulty": "standard",
    "line": "elsa/elsa_08_line.png",
    "ref": "elsa/elsa_08_ref.webp",
-   "regions": 163,
+   "regions": 62,
    "palette": [
-    "#9CCCFC",
+    "#B4E4FC",
     "#24549C",
-    "#B42484",
-    "#6C0C3C",
-    "#E49C3C",
-    "#FCCC9C"
+    "#CC843C",
+    "#FCCC9C",
+    "#CC2484",
+    "#CC3C3C"
    ]
   },
   {
@@ -179,14 +179,14 @@
    "difficulty": "standard",
    "line": "elsa/elsa_09_line.png",
    "ref": "elsa/elsa_09_ref.webp",
-   "regions": 307,
+   "regions": 73,
    "palette": [
-    "#CCE4FC",
-    "#0C3C9C",
-    "#3C6C3C",
-    "#6C0C24",
-    "#B42484",
-    "#FCCC9C"
+    "#84CCFC",
+    "#243C9C",
+    "#E49C54",
+    "#3C3C54",
+    "#FCCCB4",
+    "#6C2454"
    ]
   },
   {
@@ -197,14 +197,14 @@
    "difficulty": "standard",
    "line": "elsa/elsa_10_line.png",
    "ref": "elsa/elsa_10_ref.webp",
-   "regions": 173,
+   "regions": 44,
    "palette": [
-    "#3C54CC",
-    "#243C3C",
+    "#84E4FC",
+    "#243C6C",
     "#FCB49C",
-    "#243C84",
-    "#3C843C",
-    "#B45424"
+    "#9C3C24",
+    "#842454",
+    "#CCFCFC"
    ]
   },
   {
@@ -287,14 +287,14 @@
    "difficulty": "easy",
    "line": "bluey/bluey_05_line.png",
    "ref": "bluey/bluey_05_ref.webp",
-   "regions": 71,
+   "regions": 60,
    "palette": [
-    "#6CCCFC",
-    "#3C3C6C",
     "#CCE4FC",
-    "#FCCCCC",
-    "#E4CC6C",
-    "#E4CC3C"
+    "#84CCE4",
+    "#3C3C6C",
+    "#FC9CB4",
+    "#FCE484",
+    "#FCE424"
    ]
   },
   {
@@ -305,14 +305,14 @@
    "difficulty": "standard",
    "line": "bluey/bluey_06_line.png",
    "ref": "bluey/bluey_06_ref.webp",
-   "regions": 118,
+   "regions": 64,
    "palette": [
-    "#24CCFC",
-    "#E4B454",
-    "#FC5454",
-    "#84CCFC",
+    "#3CCCFC",
+    "#E43C3C",
+    "#84CCE4",
     "#CCE4FC",
-    "#FCFCCC"
+    "#FCFCCC",
+    "#FCB46C"
    ]
   },
   {
@@ -323,14 +323,14 @@
    "difficulty": "standard",
    "line": "bluey/bluey_07_line.png",
    "ref": "bluey/bluey_07_ref.webp",
-   "regions": 360,
+   "regions": 119,
    "palette": [
-    "#9CCC6C",
-    "#E45454",
+    "#B4E4FC",
     "#FCFCCC",
-    "#FCB46C",
-    "#84B4E4",
-    "#CCE4FC"
+    "#84CCE4",
+    "#FC9C54",
+    "#CC9C3C",
+    "#E4CC6C"
    ]
   },
   {
@@ -341,14 +341,14 @@
    "difficulty": "standard",
    "line": "bluey/bluey_08_line.png",
    "ref": "bluey/bluey_08_ref.webp",
-   "regions": 217,
+   "regions": 77,
    "palette": [
-    "#B4B484",
-    "#B4E4FC",
-    "#E4B484",
-    "#84CCE4",
+    "#84E4FC",
     "#FCFCCC",
-    "#6CB454"
+    "#FCB46C",
+    "#3C3C6C",
+    "#54B43C",
+    "#CCE4FC"
    ]
   },
   {
@@ -359,14 +359,14 @@
    "difficulty": "standard",
    "line": "bluey/bluey_09_line.png",
    "ref": "bluey/bluey_09_ref.webp",
-   "regions": 146,
+   "regions": 83,
    "palette": [
-    "#FCB46C",
     "#84B4E4",
-    "#FCE46C",
-    "#B4CC9C",
-    "#B4E4E4",
-    "#B46C54"
+    "#CCE4FC",
+    "#E4CC6C",
+    "#FCFCCC",
+    "#3C3C6C",
+    "#E46C3C"
    ]
   },
   {
@@ -377,14 +377,14 @@
    "difficulty": "standard",
    "line": "bluey/bluey_10_line.png",
    "ref": "bluey/bluey_10_ref.webp",
-   "regions": 173,
+   "regions": 88,
    "palette": [
-    "#84B4E4",
-    "#FCB454",
-    "#3C546C",
-    "#FCFCCC",
+    "#6CCCFC",
+    "#E4B46C",
+    "#84B4CC",
     "#CCE4FC",
-    "#FCE40C"
+    "#FCFCCC",
+    "#E4543C"
    ]
   },
   {
@@ -449,14 +449,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_04_line.png",
    "ref": "peppa/peppa_04_ref.webp",
-   "regions": 81,
+   "regions": 63,
    "palette": [
-    "#B4E4FC",
-    "#FCB4CC",
-    "#E43C3C",
-    "#FCE40C",
-    "#E46C9C",
-    "#0C843C"
+    "#54B484",
+    "#FC9CB4",
+    "#FCE424",
+    "#E42424",
+    "#2454CC",
+    "#0CB424"
    ]
   },
   {
@@ -485,14 +485,14 @@
    "difficulty": "standard",
    "line": "peppa/peppa_06_line.png",
    "ref": "peppa/peppa_06_ref.webp",
-   "regions": 208,
+   "regions": 65,
    "palette": [
-    "#B4E484",
-    "#E4543C",
-    "#FC9CB4",
-    "#6C9C24",
-    "#3C843C",
-    "#B4CCCC"
+    "#FC8484",
+    "#E43C3C",
+    "#FCE424",
+    "#CCCCE4",
+    "#543C24",
+    "#243C84"
    ]
   },
   {
@@ -503,14 +503,14 @@
    "difficulty": "standard",
    "line": "peppa/peppa_07_line.png",
    "ref": "peppa/peppa_07_ref.webp",
-   "regions": 201,
+   "regions": 53,
    "palette": [
-    "#9CCC3C",
-    "#FCE4E4",
-    "#FCB4B4",
-    "#FCCC3C",
-    "#FCCC84",
-    "#248454"
+    "#FC9C9C",
+    "#FC5424",
+    "#B49C84",
+    "#0CB4CC",
+    "#FCCCB4",
+    "#9C6C6C"
    ]
   },
   {
@@ -521,14 +521,14 @@
    "difficulty": "standard",
    "line": "peppa/peppa_08_line.png",
    "ref": "peppa/peppa_08_ref.webp",
-   "regions": 259,
+   "regions": 67,
    "palette": [
     "#84CCFC",
+    "#FCB4CC",
+    "#E42424",
+    "#FCE40C",
     "#FC8424",
-    "#FCB4B4",
-    "#FCE424",
-    "#FC9C6C",
-    "#84B43C"
+    "#3CCC3C"
    ]
   },
   {
@@ -539,14 +539,14 @@
    "difficulty": "standard",
    "line": "peppa/peppa_09_line.png",
    "ref": "peppa/peppa_09_ref.webp",
-   "regions": 66,
+   "regions": 29,
    "palette": [
-    "#84CCFC",
-    "#54549C",
-    "#FC840C",
-    "#84CC24",
-    "#E49C54",
-    "#E43C24"
+    "#84E4FC",
+    "#6CB424",
+    "#E4B46C",
+    "#FC8424",
+    "#FCB4B4",
+    "#2484CC"
    ]
   },
   {
@@ -557,13 +557,13 @@
    "difficulty": "standard",
    "line": "peppa/peppa_10_line.png",
    "ref": "peppa/peppa_10_ref.webp",
-   "regions": 101,
+   "regions": 54,
    "palette": [
-    "#FCCC9C",
-    "#54B454",
-    "#E4B46C",
-    "#249CCC",
+    "#FCCCCC",
     "#FCE40C",
+    "#E4B40C",
+    "#CC9C6C",
+    "#3CB454",
     "#E43C3C"
    ]
   },
@@ -593,14 +593,14 @@
    "difficulty": "easy",
    "line": "anpanman/anpanman_02_line.png",
    "ref": "anpanman/anpanman_02_ref.webp",
-   "regions": 69,
+   "regions": 51,
    "palette": [
-    "#0C549C",
-    "#FC6C0C",
+    "#2454B4",
+    "#6C6CB4",
     "#9CE4FC",
-    "#FCB40C",
-    "#846C9C",
-    "#FCE424"
+    "#FCE43C",
+    "#9C549C",
+    "#6C546C"
    ]
   },
   {
@@ -629,14 +629,14 @@
    "difficulty": "easy",
    "line": "anpanman/anpanman_04_line.png",
    "ref": "anpanman/anpanman_04_ref.webp",
-   "regions": 85,
+   "regions": 27,
    "palette": [
-    "#B4E4FC",
-    "#E4E4CC",
-    "#FCCC9C",
-    "#E42424",
-    "#545484",
-    "#E4B43C"
+    "#3C3C6C",
+    "#FCCCB4",
+    "#FCB424",
+    "#3C9C84",
+    "#FCFC9C",
+    "#CC5454"
    ]
   },
   {
@@ -665,14 +665,14 @@
    "difficulty": "standard",
    "line": "anpanman/anpanman_06_line.png",
    "ref": "anpanman/anpanman_06_ref.webp",
-   "regions": 168,
+   "regions": 62,
    "palette": [
-    "#6CE4FC",
-    "#E49C6C",
-    "#FCE4B4",
-    "#E46C3C",
+    "#6CCCCC",
+    "#CC6C3C",
     "#FCE40C",
-    "#E42424"
+    "#E42424",
+    "#9C543C",
+    "#FCCC3C"
    ]
   },
   {
@@ -683,14 +683,14 @@
    "difficulty": "standard",
    "line": "anpanman/anpanman_07_line.png",
    "ref": "anpanman/anpanman_07_ref.webp",
-   "regions": 130,
+   "regions": 65,
    "palette": [
     "#6CCCFC",
-    "#CC8454",
-    "#E42424",
+    "#FC9C6C",
     "#FCE40C",
-    "#54B43C",
-    "#0C9C3C"
+    "#B40C3C",
+    "#E40C24",
+    "#9CE4CC"
    ]
   },
   {
@@ -701,14 +701,14 @@
    "difficulty": "standard",
    "line": "anpanman/anpanman_08_line.png",
    "ref": "anpanman/anpanman_08_ref.webp",
-   "regions": 100,
+   "regions": 57,
    "palette": [
-    "#6CCCFC",
-    "#E4FCFC",
-    "#E49C54",
+    "#54CCFC",
+    "#E49C6C",
     "#FCE40C",
     "#E42424",
-    "#9C6CB4"
+    "#846C9C",
+    "#3C2424"
    ]
   },
   {
@@ -719,14 +719,14 @@
    "difficulty": "standard",
    "line": "anpanman/anpanman_09_line.png",
    "ref": "anpanman/anpanman_09_ref.webp",
-   "regions": 234,
+   "regions": 67,
    "palette": [
-    "#24B424",
-    "#FCE4E4",
-    "#E49C54",
-    "#FC5454",
-    "#9C543C",
-    "#E4240C"
+    "#9CCCFC",
+    "#FCB484",
+    "#CCE4CC",
+    "#CC843C",
+    "#E40C24",
+    "#FCE40C"
    ]
   },
   {
@@ -737,14 +737,14 @@
    "difficulty": "standard",
    "line": "anpanman/anpanman_10_line.png",
    "ref": "anpanman/anpanman_10_ref.webp",
-   "regions": 143,
+   "regions": 78,
    "palette": [
-    "#84CCFC",
-    "#FCE40C",
-    "#E42424",
+    "#CCE4FC",
+    "#E43C3C",
+    "#FCE43C",
     "#E49C6C",
-    "#FC8424",
-    "#3CB454"
+    "#54B454",
+    "#249CCC"
    ]
   },
   {

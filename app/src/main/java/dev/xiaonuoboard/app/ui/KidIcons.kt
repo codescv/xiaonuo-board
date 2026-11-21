@@ -365,6 +365,31 @@ object KidIcons {
         }
     }
 
+    /** Palette / color-dots toggle icon for showing or hiding the full 16-color tray. */
+    @Composable
+    fun MoreColors(expanded: Boolean, tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
+        Canvas(modifier.semantics { contentDescription = if (expanded) "收起更多颜色" else "展开更多颜色" }) {
+            val s = size.minDimension
+            val sw = s * 0.095f
+            if (expanded) {
+                // Down chevron inside rounded box to indicate collapse
+                val p = Path().apply {
+                    moveTo(s * 0.24f, s * 0.38f)
+                    lineTo(s * 0.50f, s * 0.66f)
+                    lineTo(s * 0.76f, s * 0.38f)
+                }
+                drawPath(p, tint, style = Stroke(sw * 1.1f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            } else {
+                // 4-dot palette grid + plus hint
+                val r = s * 0.13f
+                drawCircle(tint, r, Offset(s * 0.30f, s * 0.30f))
+                drawCircle(tint, r, Offset(s * 0.70f, s * 0.30f), style = Stroke(sw))
+                drawCircle(tint, r, Offset(s * 0.30f, s * 0.70f), style = Stroke(sw))
+                drawCircle(tint, r, Offset(s * 0.70f, s * 0.70f))
+            }
+        }
+    }
+
     /** Picture frame icon for collapsed PiP button. */
     @Composable
     fun RefPicture(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {

@@ -121,6 +121,7 @@ fun CanvasScreen(
     var ghost by remember { mutableStateOf(settings.ghostUnderlay) }
     var pipExpanded by remember { mutableStateOf(false) }
     var pipCollapsed by remember { mutableStateOf(false) }
+    var showAllColors by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var ghostHint by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -291,45 +292,33 @@ fun CanvasScreen(
                 }
             }
         }
-        // ── Canvas + floating reference PiP ──
+        // ── Canvas (left, never occluded) + side-docked reference PiP (right) ──
         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    // Saved paint is already loaded into the controller's buffer.
-                    ColoringCanvasView(ctx, controller, s.lineOverlay).also { v ->
-                        v.refBitmap = s.ref
-                        v.ghostVisible = ghost
-                        v.onFilled = { container.sound.fill() }
-                        v.onZoomChanged = { zoom = it }
-                        v.onGhostHint = { ghostHint = it }
-                        canvasView = v
-                    }
-                },
-                update = { v -> if (v.ghostVisible != ghost) v.ghostVisible = ghost },
-            )
-            if (s.refThumb != null) {
-                val pipModifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
-                when {
-                    pipCollapsed -> EinkIconButton(pipModifier, onClick = { pipCollapsed = false }) { tint ->
-                        KidIcons.RefPicture(tint)
-                    }
-                    pipExpanded -> Column(
-                        Modifier.align(Alignment.Center).fillMaxWidth(0.86f)
-                            .background(Eink.White, Eink.Shape).border(3.dp, Eink.Ink, Eink.Shape).padding(8.dp),
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AndroidView(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    factory = { ctx ->
+                        // Saved paint is already loaded into the controller's buffer.
+                        ColoringCanvasView(ctx, controller, s.lineOverlay).also { v ->
+                            v.refBitmap = s.ref
+                            v.ghostVisible = ghost
+                            v.onFilled = { container.sound.fill() }
+                            v.onZoomChanged = { zoom = it }
+                            v.onGhostHint = { ghostHint = it }
+                            canvasView = v
+                        }
+                    },
+                    update = { v -> if (v.ghostVisible != ghost) v.ghostVisible = ghost },
+                )
+                if (s.refThumb != null && !pipCollapsed && !pipExpanded) {
+                    Column(
+                        Modifier
+                            .width(156.dp)
+                            .padding(top = 4.dp)
+                            .background(Eink.White, Eink.Shape)
+                            .border(Eink.Border, Eink.Ink, Eink.Shape)
+                            .padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("参考图 · 点任意位置吸色", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                            EinkButton("关闭", fontSize = 15) { pipExpanded = false }
-                        }
-                        RefImage(s.ref ?: s.refThumb, Modifier.fillMaxWidth().aspectRatio(0.75f)) { fx, fy ->
-                            pickFromRef(fx, fy); pipExpanded = false
-                        }
-                    }
-                    else -> Column(
-                        pipModifier.width(170.dp).background(Eink.White, Eink.Shape).border(Eink.Border, Eink.Ink, Eink.Shape).padding(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         RefImage(s.refThumb, Modifier.fillMaxWidth().aspectRatio(0.75f)) { fx, fy -> pickFromRef(fx, fy) }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -352,6 +341,26 @@ fun CanvasScreen(
                     }
                 }
             }
+            if (s.refThumb != null && pipCollapsed) {
+                EinkIconButton(Modifier.align(Alignment.TopEnd).padding(6.dp), onClick = { pipCollapsed = false }) { tint ->
+                    KidIcons.RefPicture(tint)
+                }
+            }
+            if (s.refThumb != null && pipExpanded) {
+                Column(
+                    Modifier.align(Alignment.Center).fillMaxWidth(0.86f)
+                        .background(Eink.White, Eink.Shape).border(3.dp, Eink.Ink, Eink.Shape).padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("参考图 · 点任意位置吸色", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                        EinkButton("关闭", fontSize = 15) { pipExpanded = false }
+                    }
+                    RefImage(s.ref ?: s.refThumb, Modifier.fillMaxWidth().aspectRatio(0.75f)) { fx, fy ->
+                        pickFromRef(fx, fy); pipExpanded = false
+                    }
+                }
+            }
             message?.let { msg ->
                 Box(
                     Modifier.align(Alignment.BottomCenter).padding(10.dp)
@@ -359,15 +368,19 @@ fun CanvasScreen(
                 ) { Text(msg, color = Eink.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             }
         }
-        // ── Dual-row palette ──
-        Column(Modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // ── Palette: Recommended 6 colors always visible; full 16-color tray collapsed by default ──
+        Column(Modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("推荐色", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                EinkIconButton(
+                    Modifier.width(64.dp),
+                    selected = showAllColors,
+                    onClick = { showAllColors = !showAllColors },
+                ) { tint -> KidIcons.MoreColors(showAllColors, tint) }
                 val rec = s.recommended.take(6)
                 rec.forEach { c -> ColorDot(c, selected = c == color, modifier = Modifier.weight(1f)) { color = c } }
                 repeat(6 - rec.size) { Spacer(Modifier.weight(1f)) }
                 EinkIconButton(
-                    Modifier.width(72.dp),
+                    Modifier.width(64.dp),
                     selected = stylusOnly,
                     onClick = {
                         stylusOnly = !stylusOnly
@@ -376,9 +389,11 @@ fun CanvasScreen(
                     },
                 ) { tint -> KidIcons.StylusMode(stylusOnly, tint) }
             }
-            KaleidoPalette.CRAYONS.chunked(8).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { c -> ColorDot(c.argb, selected = c.argb == color, modifier = Modifier.weight(1f)) { color = c.argb } }
+            if (showAllColors) {
+                KaleidoPalette.CRAYONS.chunked(8).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { c -> ColorDot(c.argb, selected = c.argb == color, modifier = Modifier.weight(1f)) { color = c.argb } }
+                    }
                 }
             }
         }

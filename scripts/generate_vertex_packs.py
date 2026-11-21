@@ -221,19 +221,25 @@ def clean_line_art(raw: Image.Image, easy: bool) -> np.ndarray:
     arr = np.array(canvas, dtype=np.uint8)
     # Adaptive threshold: dark ink pixels become True.
     mask = arr < 175
-    # Remove tiny isolated dust specks (< 30 px).
+    # Remove tiny isolated dust specks (< 45 px).
     lbl, n = ndi.label(mask)
     if n > 0:
         sizes = np.bincount(lbl.ravel())
-        keep = sizes >= 30
+        keep = sizes >= 45
         keep[0] = False
         mask = keep[lbl]
     # Close 2px micro-gaps so flood-fill doesn't leak.
     struct = ndi.generate_binary_structure(2, 2)
     mask = ndi.binary_closing(mask, structure=struct, iterations=2)
-    # Slightly thicken very thin lines on easy pages for toddler friendliness.
-    if easy:
-        mask = ndi.binary_dilation(mask, structure=struct, iterations=1)
+    # Thicken lines slightly so every stroke is bold and easy to color on a 7.8-inch tablet.
+    mask = ndi.binary_dilation(mask, structure=struct, iterations=1)
+    # Absorb tiny unpaintable white slivers (< 180 px) into black ink so kids never hunt microscopic gaps.
+    wlab, wn = ndi.label(~mask)
+    if wn > 0:
+        wsizes = np.bincount(wlab.ravel())
+        tiny_white = (wsizes < 180)
+        tiny_white[0] = False
+        mask = mask | tiny_white[wlab]
     # Clear 2px outer border so background connects cleanly.
     mask[:2, :] = False
     mask[-2:, :] = False
@@ -328,29 +334,45 @@ def generate_one(
 
     easy = page.difficulty == "easy"
     complexity = (
-        "VERY SIMPLE toddler coloring page: extra-thick clean black outlines, 12 to 22 large clearly closed shapes, "
-        "one large centered subject, minimal background clutter."
+        "ULTRA-SIMPLE TODDLER COLORING BOOK PAGE (ages 3-5, designed for a 7-inch tablet): "
+        "extra-thick bold smooth black outlines, ONLY 12 to 24 LARGE open closed shapes, "
+        "ONE huge zoomed-in foreground character filling 75% of the page, PLAIN SOLID WHITE BACKGROUND, "
+        "ZERO grass blades, ZERO small flowers, ZERO tiny stars, ZERO complex patterns or small details."
         if easy
-        else "Clean children's storybook coloring page: clear bold black outlines, 20 to 45 nicely closed shapes, "
-        "expressive characters and a cheerful simple background."
+        else "SIMPLE CHUNKY KIDS COLORING BOOK PAGE (ages 4-6, designed for a 7-inch tablet): "
+        "thick bold smooth black outlines, ONLY 20 to 40 LARGE open closed shapes, "
+        "BIG zoomed-in foreground character(s) filling 75% of the page with at most 1-2 simple large props, "
+        "PLAIN CLEAN WHITE BACKGROUND, ZERO cluttered scenery, ZERO tiny leaves, ZERO grass tufts, ZERO checkered patterns, ZERO small details."
     )
     ref_clause = (
-        "Match the EXACT character design, face, hair/ears, and outfit of the character(s) in the attached reference image(s). "
+        "Match the character design, face, hair/ears, and outfit of the character(s) in the attached reference image(s), simplified into big bold toddler-coloring-book shapes. "
         if ref_imgs
         else ""
     )
     line_prompt = (
-        f"Create a black-and-white children's coloring book page (3:4 vertical portrait). {ref_clause}"
-        f"Scene: {page.prompt} "
+        f"Create a black-and-white toddler coloring book page (3:4 vertical portrait). {ref_clause}"
+        f"Subject: {page.prompt} "
         f"{complexity} "
-        "CRITICAL RULES: Pure black outlines (#000000) on a pure solid white background (#FFFFFF). "
+        "CRITICAL RULES: Pure black thick outlines (#000000) on a pure solid white background (#FFFFFF). "
         "NO gray tones, NO shading, NO cross-hatching, NO gradients, NO color, NO text, NO watermarks, NO border frame. "
-        "Every outline must be cleanly closed so a paint-bucket fill tool will not leak."
+        "Simplify all clothes, hair, and props into BIG, WIDE, EASY-TO-COLOR closed regions with NO tiny narrow gaps."
     )
 
-    # Step 1: Generate clean black-and-white line art
-    raw_line = _call_vertex(client, model, [*ref_imgs, line_prompt])
-    line = clean_line_art(raw_line, easy=easy)
+    # Step 1: Generate clean black-and-white line art (retry once if > 70 regions)
+    best_line = None
+    best_n = 10**9
+    for attempt in range(2):
+        p_txt = line_prompt if attempt == 0 else (
+            line_prompt + " MAKE IT EVEN SIMPLER AND BIGGER: zoom in closer on the character(s), remove all background elements completely, keep fewer than 35 large shapes!"
+        )
+        raw_line = _call_vertex(client, model, [*ref_imgs, p_txt])
+        cand = clean_line_art(raw_line, easy=easy)
+        _, cand_n = ndi.label(~cand)
+        if cand_n < best_n:
+            best_line, best_n = cand, int(cand_n)
+        if cand_n <= 65:
+            break
+    line = best_line
 
     # Step 2: Colorize the exact cleaned line art using the character reference(s)
     line_png_buf = io.BytesIO()
