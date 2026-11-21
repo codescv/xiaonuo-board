@@ -32,7 +32,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,7 +110,8 @@ fun CanvasScreen(
     }
 
     val controller = s.controller
-    val scope = rememberCoroutineScope()
+    // Every background job that reads session bitmaps; they are recycled only after all have finished.
+    val ioJobs = remember(pageId) { JobTracker() }
     var currentArtworkId by remember(pageId) { mutableStateOf(initialArtworkId) }
     var tool by remember { mutableStateOf(controller.tool) }
     var brush by remember { mutableStateOf(controller.brushSize) }
@@ -152,7 +152,7 @@ fun CanvasScreen(
             message = "🎉 太棒啦！这幅画快涂完啦！"
             container.sound.cheer()
         }
-        return container.appScope.launch {
+        return ioJobs.track(container.appScope.launch {
             var composite: Bitmap? = null
             var thumb: Bitmap? = null
             try {
@@ -166,7 +166,7 @@ fun CanvasScreen(
                 composite?.recycle()
                 snapshot.recycle()
             }
-        }
+        })
     }
 
     LaunchedEffect(controller) {
@@ -176,12 +176,13 @@ fun CanvasScreen(
     DisposableEffect(controller) {
         onDispose {
             controller.onCommitted = null
-            val pending = if (saveTicks.value > 0) saveNow(notifyNav = false) else null
+            if (saveTicks.value > 0) saveNow(notifyNav = false)
             canvasView?.release()
             canvasView = null
-            // Session bitmaps are freed only after the final save (which composites lineOverlay) finishes.
+            // Session bitmaps are freed only after every in-flight save / export (which composite
+            // lineOverlay) has finished.
             container.appScope.launch {
-                pending?.join()
+                ioJobs.joinAll()
                 s.recycle()
             }
         }
@@ -228,8 +229,8 @@ fun CanvasScreen(
                 saveNow()
                 val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
                 message = "正在导出高清 PNG…"
-                scope.launch {
-                    message = withContext(Dispatchers.IO) {
+                ioJobs.track(container.appScope.launch {
+                    val result = run {
                         var out: Bitmap? = null
                         try {
                             out = BitmapIO.composite(snapshot, s.lineOverlay)
@@ -243,7 +244,8 @@ fun CanvasScreen(
                             snapshot.recycle()
                         }
                     }
-                }
+                    withContext(Dispatchers.Main) { message = result }
+                })
             }
         }
         // ── Secondary row: brush size / zoom / reset ──

@@ -190,7 +190,7 @@ class ColoringCanvasView(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (paintBitmap.isRecycled) return
+        if (paintBitmap.isRecycled || lineOverlay.isRecycled) return
         canvas.drawColor(Color.WHITE)
         canvas.save()
         canvas.concat(viewMatrix)

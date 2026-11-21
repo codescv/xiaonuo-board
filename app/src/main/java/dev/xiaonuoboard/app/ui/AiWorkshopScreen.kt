@@ -37,6 +37,7 @@ import dev.xiaonuoboard.app.ai.AiPipeline
 import dev.xiaonuoboard.app.ai.PromptBuilder
 import dev.xiaonuoboard.app.data.BitmapIO
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -56,21 +57,34 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
     var freeText by remember { mutableStateOf("") }
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    val ioJobs = remember { JobTracker() }
+    val disposed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val locked = busy || saving
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiPipeline.Output?>(null) }
     var resultTitle by remember { mutableStateOf("") }
 
-    // Free large preview bitmaps whenever a result is replaced/cleared or the screen leaves.
+    // Free large bitmaps whenever a result/photo is replaced or the screen leaves — but only after
+    // every background job that may still read them (generate / save) has finished.
     DisposableEffect(result) {
         val r = result
         onDispose {
-            r?.line?.recycle()
-            r?.ref?.recycle()
+            if (r != null) container.appScope.launch {
+                ioJobs.joinAll()
+                r.line.recycle()
+                r.ref?.recycle()
+            }
         }
     }
     DisposableEffect(photo) {
         val p = photo
-        onDispose { p?.recycle() }
+        onDispose {
+            if (p != null) container.appScope.launch { ioJobs.joinAll(); p.recycle() }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { disposed.set(true) }
     }
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -102,14 +116,18 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
             }
         }
         busy = true; result = null; status = "准备中…"
-        scope.launch {
-            val out = withContext(Dispatchers.IO) {
-                runCatching {
-                    container.aiPipeline.run(prompt, if (tab == AiTab.PHOTO) photo else null) { _, msg ->
-                        scope.launch { status = msg }
-                    }
-                }
+        val input = if (tab == AiTab.PHOTO) photo else null
+        // Runs on the app scope (tracked) so a Back press never recycles `input` mid-request.
+        val job = container.appScope.async {
+            val r = runCatching {
+                container.aiPipeline.run(prompt, input) { _, msg -> scope.launch { status = msg } }
             }
+            if (disposed.get()) r.getOrNull()?.let { it.line.recycle(); it.ref?.recycle() }
+            r
+        }
+        ioJobs.track(job)
+        scope.launch {
+            val out = job.await()
             busy = false
             out.onSuccess {
                 result = it; resultTitle = title
@@ -120,11 +138,17 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
 
     fun save(colorNow: Boolean) {
         val r = result ?: return
+        if (saving) return
+        saving = true
+        val title = resultTitle
+        val job = container.appScope.async { runCatching { container.pages.saveCustomPage(title, r.line, r.ref, "ai", r.regions) } }
+        ioJobs.track(job)
         scope.launch {
-            val page = withContext(Dispatchers.IO) {
-                container.pages.saveCustomPage(resultTitle, r.line, r.ref, "ai", r.regions)
-            }
-            if (colorNow) onColorNow(page.id) else { status = "✓ 已保存到「AI 魔法」离线图库"; result = null }
+            val page = job.await()
+            saving = false
+            page.onSuccess {
+                if (colorNow) onColorNow(it.id) else { status = "✓ 已保存到「AI 魔法」离线图库"; result = null }
+            }.onFailure { status = "保存失败：${it.message}" }
         }
     }
 
@@ -136,7 +160,7 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
                 Text("模型：${container.settings.current.model}", fontSize = 14.sp, color = Eink.Muted)
             }
         }
-        EinkSegmented(AiTab.entries.map { it to it.label }, tab) { tab = it; result = null }
+        EinkSegmented(AiTab.entries.map { it to it.label }, tab) { if (!locked) { tab = it; result = null } }
 
         when (tab) {
             AiTab.COMBO -> {
@@ -157,7 +181,7 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
                 modifier = Modifier.fillMaxWidth().height(110.dp),
             )
             AiTab.PHOTO -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                EinkButton(if (photo == null) "📷 选择照片" else "📷 换一张") { pickPhoto.launch(arrayOf("image/*")) }
+                EinkButton(if (photo == null) "📷 选择照片" else "📷 换一张", enabled = !locked) { pickPhoto.launch(arrayOf("image/*")) }
                 photo?.let {
                     Image(it.asImageBitmap(), null, Modifier.height(96.dp).aspectRatio(it.width.toFloat() / it.height).border(Eink.Border, Eink.Ink))
                 }
@@ -168,7 +192,7 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
             Text("3. 线条难度：", fontWeight = FontWeight.ExtraBold)
             EinkSegmented(PromptBuilder.Difficulty.entries.map { it to it.label }, difficulty, Modifier.weight(1f)) { difficulty = it }
         }
-        EinkButton(if (busy) "⏳ 生成中…" else "🪄 生成双图（线稿 + 参考图）", Modifier.fillMaxWidth(), selected = true, enabled = !busy) { generate() }
+        EinkButton(if (busy) "⏳ 生成中…" else "🪄 生成双图（线稿 + 参考图）", Modifier.fillMaxWidth(), selected = true, enabled = !locked) { generate() }
         status?.let { Text(it, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
 
         val r = result
@@ -178,8 +202,8 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
                 PreviewPane("涂色后 · 参考彩图", r.ref, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EinkButton("✓ 保存并立即开始涂色", Modifier.weight(2f), selected = true) { save(true) }
-                EinkButton("仅保存", Modifier.weight(1f)) { save(false) }
+                EinkButton(if (saving) "⏳ 保存中…" else "✓ 保存并立即开始涂色", Modifier.weight(2f), selected = true, enabled = !saving) { save(true) }
+                EinkButton("仅保存", Modifier.weight(1f), enabled = !saving) { save(false) }
             }
         } else {
             Box(Modifier.weight(1f))
