@@ -57,7 +57,7 @@ class OnyxTouchHelperBackend(
             val h = TouchHelper.create(view, Callback(++session))
             helper = h
             h.setStrokeWidth(strokeWidth)
-            h.setLimitRect(limit.toRect(), exclude.map { it.toRect() })
+            h.setLimitRect(limit.toRect(), excludes(exclude))
             h.openRawDrawing()
             h.setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
             h.setStrokeColor(strokeColor)
@@ -75,7 +75,9 @@ class OnyxTouchHelperBackend(
     }
 
     override fun setLimit(limit: DirtyRect, exclude: List<DirtyRect>): Boolean =
-        call("setLimitRect") { it.setLimitRect(limit.toRect(), exclude.map { r -> r.toRect() }) }
+        call("setLimitRect") { it.setLimitRect(limit.toRect(), excludes(exclude)) }
+
+    private fun excludes(exclude: List<DirtyRect>) = RawDrawingGeometry.touchHelperExcludes(exclude).map { it.toRect() }
 
     override fun setEnabled(enabled: Boolean): Boolean = call("setRawDrawingEnabled") { it.setRawDrawingEnabled(enabled) }
 

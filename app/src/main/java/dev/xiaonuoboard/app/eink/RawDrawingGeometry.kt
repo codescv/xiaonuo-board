@@ -21,6 +21,18 @@ object RawDrawingGeometry {
             ).takeUnless { it.isEmpty }
         }
 
+    /**
+     * onyxsdk-pen 1.5.9 `RawInputReader.setExcludeRect(list)` is a no-op for an EMPTY list (neither
+     * `nativeSetExcludeRegion` nor `EpdController.setScreenHandWritingRegionExclude` is called) and
+     * the native reader is a process-wide singleton, so an overlay's exclusion would outlive it.
+     * "No exclusions" is therefore sent as one zero-area rect far off screen, which overwrites both
+     * the native and the SurfaceFlinger exclude regions (zero area also skips Onyx's empty-region
+     * error log).
+     */
+    fun touchHelperExcludes(exclude: List<DirtyRect>): List<DirtyRect> = exclude.ifEmpty { listOf(CLEAR_EXCLUDES) }
+
+    val CLEAR_EXCLUDES = DirtyRect(-10_000, -10_000, -10_000, -10_000)
+
     /** Hardware trace width in screen px: the brush diameter (eraser ×1.5, like the engine) at the zoom. */
     fun traceWidthPx(brushRadius: Float, eraser: Boolean, viewScale: Float): Float =
         brushRadius * (if (eraser) ERASER_SCALE else 1f) * 2f * viewScale

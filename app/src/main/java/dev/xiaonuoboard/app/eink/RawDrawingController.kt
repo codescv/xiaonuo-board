@@ -61,9 +61,16 @@ interface UiScheduler {
  * layer back on after [RENDER_RESUME_DELAY_MS]. A pen stroke starting earlier re-enables it
  * immediately (the canvas folds any still-pending refresh into that stroke's pen-up refresh).
  *
+ * Finger gestures (pan / pinch / finger painting) hold the pen layer hidden for their whole
+ * duration ([setFingerGesture]) so their frames reach the panel; a pen stroke always wins and
+ * brings the layer straight back. Only ONE resume can ever be pending: hiding or re-scheduling
+ * cancels it, so a stale timer can never re-enable the layer under a newer refresh / gesture.
+ *
  * Self-healing: if [MAX_MISSES] consecutive pen strokes arrive only as MotionEvents while raw
- * drawing is enabled (TouchHelper not delivering), raw drawing is shut down and [onFailure] fires,
- * so the canvas keeps working on the standard path.
+ * drawing is enabled and TouchHelper has NEVER delivered a raw stroke in this session (i.e. it is
+ * not working at all), raw drawing is shut down and [onFailure] fires, so the canvas keeps working
+ * on the standard path. Once raw strokes have been seen, MotionEvent-only strokes (e.g. pen-downs
+ * the native reader drops at the limit / exclude edges) never count.
  */
 class RawDrawingController(
     private val available: () -> Boolean,
@@ -113,8 +120,14 @@ class RawDrawingController(
     private var rawSeenInPenStroke = false
     var consecutiveMisses = 0
         private set
+    /** TouchHelper has delivered at least one raw stroke since this controller was created. */
+    var rawEverDelivered = false
+        private set
+    /** A finger gesture is in progress: keep the pen layer hidden until it ends. */
+    var isFingerGestureActive = false
+        private set
 
-    private val resumeRender = Runnable { resumeRenderNow() }
+    private val resumeRender = Runnable { if (!isFingerGestureActive) resumeRenderNow() }
 
     // ---------------- inputs ----------------
 
@@ -197,6 +210,7 @@ class RawDrawingController(
         isRenderEnabled = false
         reanchorPending = false
         penStrokeOpen = false
+        isFingerGestureActive = false
         backend?.close()
     }
 
@@ -255,7 +269,10 @@ class RawDrawingController(
     override fun onRawBegin(x: Float, y: Float, pressure: Float, time: Long, erasing: Boolean) {
         if (!isOpen || !isEnabled) return // stale: posted before a pause / close
         if (isRawStrokeActive) abortRawStroke() // previous stroke never ended
+        isFingerGestureActive = false // pen priority: the router aborts any finger gesture
         resumeRenderNow()
+        if (!isEnabled) return // resuming the pen layer failed → raw drawing shut down
+        rawEverDelivered = true
         consecutiveMisses = 0
         isRawStrokeActive = true
         movesInStroke = 0
@@ -289,6 +306,7 @@ class RawDrawingController(
     fun onPenStrokeStart() {
         penStrokeOpen = true
         rawSeenInPenStroke = isRawStrokeActive
+        isFingerGestureActive = false
         resumeRenderNow()
     }
 
@@ -297,7 +315,7 @@ class RawDrawingController(
         if (!penStrokeOpen) return
         penStrokeOpen = false
         if (cancelled || !isEnabled) return
-        if (rawSeenInPenStroke) {
+        if (rawSeenInPenStroke || rawEverDelivered) {
             consecutiveMisses = 0
         } else if (++consecutiveMisses >= MAX_MISSES) {
             fail("TouchHelper 连续 $MAX_MISSES 笔未回传笔迹")
@@ -306,13 +324,32 @@ class RawDrawingController(
 
     /** Before an app refresh (e.g. pen-up): hide the hardware pen layer so the refresh shows. */
     fun hidePenLayer() {
+        scheduler.cancel(resumeRender) // a pending resume must not fire under this refresh
         if (!isOpen || !isEnabled || !isRenderEnabled) return
         if (backend?.setRenderEnabled(false) == true) isRenderEnabled = false else fail("setRawDrawingRenderEnabled(false) failed")
     }
 
     /** The app refresh was issued: bring the hardware pen layer back shortly after. */
     fun schedulePenLayerResume() {
+        scheduler.cancel(resumeRender) // at most one pending resume, always the latest
+        if (isFingerGestureActive) return // resumed when the gesture ends
         if (isOpen && isEnabled && !isRenderEnabled) scheduler.postDelayed(resumeRender, RENDER_RESUME_DELAY_MS)
+    }
+
+    /**
+     * A finger gesture (pan / pinch / finger stroke) started or ended on the canvas. Ignored while a
+     * raw pen stroke is drawing (a resting palm must not hide the live trace).
+     */
+    fun setFingerGesture(active: Boolean) {
+        if (active == isFingerGestureActive) return
+        if (active) {
+            if (isRawStrokeActive) return
+            isFingerGestureActive = true
+            hidePenLayer()
+        } else {
+            isFingerGestureActive = false
+            schedulePenLayerResume()
+        }
     }
 
     companion object {

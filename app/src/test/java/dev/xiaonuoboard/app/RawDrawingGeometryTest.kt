@@ -53,4 +53,15 @@ class RawDrawingGeometryTest {
         t.add(5f, 5f)
         assertEquals(DirtyRect(-1, -1, 12, 12), t.refreshRect(2f, 5f))
     }
+
+    @Test
+    fun emptyExcludesAreSentAsAClearingSentinel() {
+        // An empty list would be a no-op in onyxsdk-pen 1.5.9 and leave the previous overlay excluded.
+        assertEquals(listOf(RawDrawingGeometry.CLEAR_EXCLUDES), RawDrawingGeometry.touchHelperExcludes(emptyList()))
+        val s = RawDrawingGeometry.CLEAR_EXCLUDES
+        assertTrue("zero area (skips Onyx's empty-region log)", s.isEmpty)
+        assertTrue("far off screen", s.right < 0 && s.bottom < 0)
+        val one = listOf(DirtyRect(1, 2, 3, 4))
+        assertEquals(one, RawDrawingGeometry.touchHelperExcludes(one))
+    }
 }

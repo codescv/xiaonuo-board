@@ -147,8 +147,11 @@ class ColoringCanvasView(
                 val all = strokeDirty.union(rect.clamp(cw, ch))
                 strokeDirty = DirtyRect.EMPTY
                 if (!all.isEmpty) requestRefresh(all, EinkMode.NORMAL)
-                // Even when nothing was painted the hardware trace must be repainted away.
-                if (wasHw) postOnAnimation(flushRefresh)
+                // Even when nothing was painted the hardware trace must be repainted away (one post).
+                if (wasHw) {
+                    removeCallbacks(flushRefresh)
+                    postOnAnimation(flushRefresh)
+                }
                 if (!cancelled) {
                     strokesSinceFull++
                     onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
@@ -424,15 +427,14 @@ class ColoringCanvasView(
                 else -> batch.mode
             }
             if (rect.intersect(0, 0, width, height)) {
-                // FAST (DU) frames of a finger stroke skip the handshake: the pen layer only matters
-                // for pen strokes, and toggling it every frame would cost two firmware calls / frame.
-                val handshake = mode != EinkMode.FAST
-                if (handshake) raw.hidePenLayer()
+                // FAST (DU) frames only happen during finger strokes, which already hold the pen layer
+                // hidden for the whole gesture (no per-frame firmware toggles).
+                if (mode != EinkMode.FAST) raw.hidePenLayer()
                 OnyxEinkBridge.refreshRect(this, rect, mode)
-                if (handshake) raw.schedulePenLayerResume()
             }
         }
-        // Pen-up with nothing to refresh (e.g. view released): still bring the pen layer back.
+        // Single resume point (also when there was nothing to refresh); no-op while a finger
+        // gesture holds the layer or when it is already showing.
         raw.schedulePenLayerResume()
     }
 
@@ -515,6 +517,9 @@ class ColoringCanvasView(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
                 val kind = kindOf(e, i)
+                // Finger pan / pinch / painting: keep the BOOX pen layer hidden until all fingers
+                // lift so these frames reach the panel (ignored while a raw pen stroke draws).
+                if (!isPen(kind) && !hwPreview) raw.setFingerGesture(true)
                 // A pen MotionEvent that went down before the last raw stroke ended is that same
                 // physical stroke, delivered late by the regular input pipeline: drop it (its later
                 // moves / up are ignored because the router never registered the pointer).
@@ -538,9 +543,13 @@ class ColoringCanvasView(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val i = e.actionIndex
                 router.up(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
+                if (e.actionMasked == MotionEvent.ACTION_UP) raw.setFingerGesture(false)
             }
             // Cancels the MotionEvent stream only; a raw pen stroke (separate source) carries on.
-            MotionEvent.ACTION_CANCEL -> router.cancelAllExcept(RAW_POINTER_ID)
+            MotionEvent.ACTION_CANCEL -> {
+                router.cancelAllExcept(RAW_POINTER_ID)
+                raw.setFingerGesture(false)
+            }
             else -> return super.onTouchEvent(e)
         }
         return true

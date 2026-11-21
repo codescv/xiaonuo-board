@@ -21,6 +21,7 @@ class RawDrawingControllerTest {
         var opens = 0
         var openOk = true
         var enableOk = true
+        var renderOk = true
         var lastLimit: DirtyRect? = null
         var lastExclude: List<DirtyRect> = emptyList()
         var lastStroke: Pair<Float, Int>? = null
@@ -43,7 +44,11 @@ class RawDrawingControllerTest {
             if (!enableOk) return false
             this.enabled = enabled; render = enabled; return true
         }
-        override fun setRenderEnabled(enabled: Boolean): Boolean { log += "render=$enabled"; render = enabled; return true }
+        override fun setRenderEnabled(enabled: Boolean): Boolean {
+            log += "render=$enabled"
+            if (!renderOk) return false
+            render = enabled; return true
+        }
         override fun setStroke(width: Float, color: Int): Boolean { log += "stroke"; lastStroke = width to color; return true }
         override fun close() { log += "close"; open = false; enabled = false; render = false }
     }
@@ -329,6 +334,90 @@ class RawDrawingControllerTest {
         assertTrue(r.c.isFailed)
         assertFalse(r.c.isOpen)
         assertTrue(r.backend.log.contains("close"))
+    }
+
+    @Test
+    fun hidingCancelsAPendingResumeSoAStaleTimerCannotFireUnderANewRefresh() {
+        val r = Rig().armed()
+        r.c.hidePenLayer() // stroke 1 pen-up
+        r.c.schedulePenLayerResume() // resume due at t+32
+        assertEquals(1, r.scheduler.pending.size)
+        r.c.hidePenLayer() // t+25: undo / clear-ghosting refresh
+        assertTrue("stale resume cancelled", r.scheduler.pending.isEmpty())
+        assertFalse(r.c.isRenderEnabled)
+        r.c.schedulePenLayerResume()
+        r.c.schedulePenLayerResume() // duplicate schedules collapse into one
+        assertEquals(1, r.scheduler.pending.size)
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun fingerGestureHoldsThePenLayerHiddenUntilItEnds() {
+        val r = Rig().armed()
+        r.backend.log.clear()
+        r.c.setFingerGesture(true) // pinch / pan / finger painting starts
+        assertEquals(listOf("render=false"), r.backend.log)
+        r.c.hidePenLayer(); r.c.schedulePenLayerResume() // per-frame refreshes during the gesture
+        assertTrue("no resume while the gesture holds the layer", r.scheduler.pending.isEmpty())
+        r.c.setFingerGesture(false)
+        assertEquals(1, r.scheduler.pending.size)
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun staleResumeFiringDuringAFingerGestureIsInert() {
+        val r = Rig().armed()
+        r.c.hidePenLayer()
+        r.c.schedulePenLayerResume()
+        val stale = r.scheduler.pending.single()
+        r.c.setFingerGesture(true)
+        stale.run() // even if a runnable escaped cancellation
+        assertFalse(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun penBeatsAFingerHoldAndARestingPalmNeverHidesALiveTrace() {
+        val r = Rig().armed()
+        r.c.setFingerGesture(true) // palm lands first
+        r.c.onRawBegin(10f, 10f, 1f, 0L, false)
+        assertTrue(r.c.isRenderEnabled)
+        assertFalse(r.c.isFingerGestureActive)
+        r.backend.log.clear()
+        r.c.setFingerGesture(true) // palm lands during the raw stroke
+        assertTrue(r.backend.log.isEmpty())
+        assertTrue(r.c.isRenderEnabled)
+        // MotionEvent-owned pen stroke also clears the hold.
+        r.c.onRawEnd(10f, 10f, 0f, 0L, false)
+        r.c.setFingerGesture(true)
+        r.c.onPenStrokeStart()
+        assertTrue(r.c.isRenderEnabled)
+        assertFalse(r.c.isFingerGestureActive)
+    }
+
+    @Test
+    fun rawBeginDoesNotStartAStrokeWhenResumingThePenLayerFails() {
+        val r = Rig().armed()
+        r.c.hidePenLayer()
+        r.backend.renderOk = false
+        r.c.onRawBegin(10f, 10f, 1f, 0L, false)
+        assertTrue(r.c.isFailed)
+        assertFalse(r.c.isRawStrokeActive)
+        assertTrue("no orphan RAW pointer in the router", r.sink.events.isEmpty())
+    }
+
+    @Test
+    fun motionOnlyStrokesNeverDisableAWorkingTouchHelper() {
+        val r = Rig().armed()
+        r.stroke() // TouchHelper proved it works
+        repeat(RawDrawingController.MAX_MISSES * 3) {
+            // e.g. pen-downs the native reader drops at the canvas / exclude edges
+            r.c.onPenStrokeStart()
+            r.c.onPenStrokeEnd(cancelled = false)
+        }
+        assertNull(r.failure)
+        assertTrue(r.c.isEnabled)
     }
 
     @Test

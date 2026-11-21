@@ -77,7 +77,10 @@ fun XiaonuoApp(container: AppContainer) {
     fun replaceTop(s: Screen) { stack = stack.dropLast(1) + s }
 
     val view = LocalView.current
-    LaunchedEffect(screen, settings.einkMode) {
+    // A canvas keeps its identity when its first auto-save assigns an artworkId (Screen.Canvas is
+    // replaced in place): no root refresh then, it could land mid-stroke under the BOOX pen layer.
+    val screenKey: Any = if (screen is Screen.Canvas) "canvas:${screen.pageId}" else screen
+    LaunchedEffect(screenKey, settings.einkMode) {
         // Browsing screens use the parent-selected clear mode; each screen switch gets one clean refresh.
         OnyxEinkBridge.setViewDefaultMode(view, settings.einkMode)
         OnyxEinkBridge.refresh(view, settings.einkMode)
