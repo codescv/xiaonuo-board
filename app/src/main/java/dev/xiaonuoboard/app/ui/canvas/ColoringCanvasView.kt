@@ -30,7 +30,6 @@ class ColoringCanvasView(
     context: Context,
     val controller: ColoringCanvasController,
     private val lineOverlay: Bitmap,
-    initialPaint: Bitmap? = null,
 ) : View(context) {
 
     private val cw = controller.width
@@ -91,7 +90,6 @@ class ColoringCanvasView(
 
     init {
         setBackgroundColor(Color.WHITE)
-        initialPaint?.let { it.getPixels(controller.paint, 0, cw, 0, 0, cw, ch) }
         paintBitmap.setPixels(controller.paint, 0, cw, 0, 0, cw, ch)
         controller.onDirty = { r -> syncRect(r) }
         isFocusable = true

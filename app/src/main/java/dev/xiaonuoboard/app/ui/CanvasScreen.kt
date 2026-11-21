@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -71,7 +70,6 @@ private class CanvasSession(
     val lineOverlay: Bitmap,
     val ref: Bitmap?,
     val refThumb: Bitmap?,
-    val initialPaint: Bitmap?,
     val recommended: List<Int>,
 )
 
@@ -131,14 +129,15 @@ fun CanvasScreen(
     controller.stayInsideLines = stayInside
     controller.stylusOnly = stylusOnly
 
-    fun saveNow() {
+    fun saveNow(notifyNav: Boolean = true) {
         val view = canvasView ?: return
         val snapshot = view.paintBitmap.copy(Bitmap.Config.ARGB_8888, false)
         val progress = controller.progress()
         val existing = currentArtworkId
         val id = existing ?: container.artworks.create(s.page).id.also {
             currentArtworkId = it
-            onArtworkCreated(it)
+            // Never touch navigation while the screen is being disposed (back already popped it).
+            if (notifyNav) onArtworkCreated(it)
         }
         container.appScope.launch {
             val thumb = Bitmap.createScaledBitmap(BitmapIO.composite(snapshot, s.lineOverlay), 300, 400, true)
@@ -159,7 +158,7 @@ fun CanvasScreen(
     DisposableEffect(controller) {
         onDispose {
             controller.onCommitted = null
-            if (saveTicks.value > 0) saveNow()
+            if (saveTicks.value > 0) saveNow(notifyNav = false)
         }
     }
     fun pickFromRef(fx: Float, fy: Float) {
@@ -243,11 +242,12 @@ fun CanvasScreen(
             }
         }
         // ── Canvas + floating reference PiP ──
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
-                    ColoringCanvasView(ctx, controller, s.lineOverlay, s.initialPaint).also { v ->
+                    // Saved paint is already loaded into the controller's buffer.
+                    ColoringCanvasView(ctx, controller, s.lineOverlay).also { v ->
                         v.refBitmap = s.ref
                         v.ghostVisible = ghost
                         v.onFilled = { container.sound.fill() }
@@ -362,5 +362,5 @@ private fun loadSession(container: AppContainer, pageId: String, artworkId: Stri
     val controller = ColoringCanvasController(w, h, ink, paintPixels)
     val extracted = ref?.let { PaletteExtractor.extract(BitmapIO.pixels(it), count = 6, stride = 5) }.orEmpty()
     val recommended = extracted.ifEmpty { page.palette }.ifEmpty { KaleidoPalette.CRAYONS.take(6).map { it.argb } }
-    return CanvasSession(page, controller, overlay, ref, refThumb, paintBmp, recommended)
+    return CanvasSession(page, controller, overlay, ref, refThumb, recommended)
 }
