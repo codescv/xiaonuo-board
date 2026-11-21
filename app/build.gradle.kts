@@ -55,6 +55,35 @@ android {
     }
 }
 
+/*
+ * BOOX Onyx SDK transitive dependencies that are statically unreachable from everything this app
+ * calls (TouchHelper / RawInputCallback / TouchPoint(List) / EpdController / UpdateMode / Device —
+ * verified with a constant-pool class-reference closure over the resolved runtime classpath).
+ * They are excluded because they either break the build or only add dead weight:
+ *  - com.android.support:* (via easypermissions): duplicate classes with AndroidX core.
+ *  - mmkv: 4-ABI native libs (+ a 3rd libc++_shared.so) used only by Onyx's MMKVBuilder.
+ *  - onyxsdk-pennative (libneopen_jni.so, ~7 MB stored for 2 ABIs + a 2nd libc++_shared.so) and
+ *    onyxsdk-geometry: only used by the Neo brush/shape renderers, never by TouchHelper raw drawing.
+ *    onyxsdk-pen's own arm64 libonyx_pen_touch_reader.so + libc++_shared.so remain.
+ *  - retrofit / logging-interceptor / zip4j / commons-io / dynamicanimation: Onyx OTA, zip and
+ *    scroller utilities; fst's javassist / objenesis / jackson serializers.
+ */
+configurations.configureEach {
+    exclude(group = "com.android.support")
+    exclude(group = "pub.devrel", module = "easypermissions")
+    exclude(group = "com.tencent", module = "mmkv")
+    exclude(group = "com.onyx.android.sdk", module = "onyxsdk-pennative")
+    exclude(group = "com.onyx.android.sdk", module = "onyxsdk-geometry")
+    exclude(group = "com.squareup.retrofit2", module = "retrofit")
+    exclude(group = "com.squareup.okhttp3", module = "logging-interceptor")
+    exclude(group = "net.lingala.zip4j", module = "zip4j")
+    exclude(group = "commons-io", module = "commons-io")
+    exclude(group = "androidx.dynamicanimation", module = "dynamicanimation")
+    exclude(group = "org.javassist", module = "javassist")
+    exclude(group = "org.objenesis", module = "objenesis")
+    exclude(group = "com.fasterxml.jackson.core", module = "jackson-core")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -76,6 +105,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.onyxsdk.device)
+    implementation(libs.onyxsdk.pen)
+    implementation(libs.hiddenapibypass)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.core)

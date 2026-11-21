@@ -35,15 +35,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect as UiRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.ColoringPage
@@ -57,6 +63,7 @@ import dev.xiaonuoboard.app.ui.canvas.ColoringCanvasView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -134,6 +141,11 @@ fun CanvasScreen(
     /** An auto-save fired mid-stroke; it is re-queued as soon as that stroke ends. */
     val saveDeferred = remember { AtomicBoolean(false) }
     var canvasView by remember { mutableStateOf<ColoringCanvasView?>(null) }
+    // Window bounds of overlays drawn ON TOP of the canvas: the BOOX pen layer must not draw there
+    // (and pen taps on them must reach Compose), so they are excluded from TouchHelper raw drawing.
+    var refButtonBounds by remember { mutableStateOf<UiRect?>(null) }
+    var messageBounds by remember { mutableStateOf<UiRect?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Push UI state into the engine.
     controller.tool = tool
@@ -196,6 +208,25 @@ fun CanvasScreen(
         })
     }
 
+    // The inline 「确认清空?」 confirmation expires on its own (it also suspends BOOX raw drawing).
+    LaunchedEffect(confirmReset) {
+        if (confirmReset) {
+            delay(CONFIRM_RESET_TIMEOUT_MS)
+            confirmReset = false
+        }
+    }
+    // Activity paused (screen off, another app, system dialog…) → BOOX pen layer off until resumed.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> canvasView?.setHostResumed(true)
+                Lifecycle.Event.ON_PAUSE -> canvasView?.setHostResumed(false)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(controller) {
         controller.onCommitted = { saveTicks.value = saveTicks.value + 1 }
         saveTicks.drop(1).debounce(600).collect { saveNow() }
@@ -336,10 +367,22 @@ fun CanvasScreen(
                             v.onGhostHint = { ghostHint = it }
                             // Re-queue (debounced) an auto-save that was deferred because it came due mid-stroke.
                             v.onStrokeEnded = { if (saveDeferred.getAndSet(false)) saveTicks.value = saveTicks.value + 1 }
+                            v.setHostResumed(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
                             canvasView = v
                         }
                     },
-                    update = { v -> if (v.ghostVisible != ghost) v.ghostVisible = ghost },
+                    update = { v ->
+                        if (v.ghostVisible != ghost) v.ghostVisible = ghost
+                        // BOOX TouchHelper: armed for crayon / eraser only (never the bucket), and
+                        // suspended while the enlarged reference or the 清空 confirmation is up.
+                        v.syncToolState(tool, brush, color, suspendRaw = pipExpanded || confirmReset)
+                        v.setRawExcludeRectsInWindow(
+                            listOfNotNull(
+                                refButtonBounds?.takeIf { s.refThumb != null && pipCollapsed },
+                                messageBounds?.takeIf { message != null },
+                            ).map { it.toAndroidRect() },
+                        )
+                    },
                 )
                 if (s.refThumb != null && !pipCollapsed && !pipExpanded) {
                     Column(
@@ -373,7 +416,10 @@ fun CanvasScreen(
                 }
             }
             if (s.refThumb != null && pipCollapsed) {
-                EinkIconButton(Modifier.align(Alignment.TopEnd).padding(6.dp), onClick = { pipCollapsed = false }) { tint ->
+                EinkIconButton(
+                    Modifier.align(Alignment.TopEnd).padding(6.dp).onGloballyPositioned { refButtonBounds = it.boundsInWindow() },
+                    onClick = { pipCollapsed = false },
+                ) { tint ->
                     KidIcons.RefPicture(tint)
                 }
             }
@@ -395,6 +441,7 @@ fun CanvasScreen(
             message?.let { msg ->
                 Box(
                     Modifier.align(Alignment.BottomCenter).padding(10.dp)
+                        .onGloballyPositioned { messageBounds = it.boundsInWindow() }
                         .background(Eink.Ink, Eink.Shape).einkClick { message = null }.padding(horizontal = 14.dp, vertical = 8.dp),
                 ) { Text(msg, color = Eink.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             }
@@ -430,6 +477,11 @@ fun CanvasScreen(
         }
     }
 }
+
+private const val CONFIRM_RESET_TIMEOUT_MS = 5_000L
+
+private fun UiRect.toAndroidRect() =
+    android.graphics.Rect(left.toInt(), top.toInt(), kotlin.math.ceil(right).toInt(), kotlin.math.ceil(bottom).toInt())
 
 @Composable
 private fun RefImage(bmp: Bitmap, modifier: Modifier, onPick: (Float, Float) -> Unit) {

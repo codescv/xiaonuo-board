@@ -174,6 +174,35 @@ class InputRouter(
         reset()
     }
 
+    /**
+     * Drops ONE pointer that can no longer deliver an up (e.g. the BOOX raw pen stream was paused
+     * mid-stroke): a stroke it owns is rolled back, other gestures are left alone.
+     */
+    fun cancelPointer(id: Int) {
+        if (pointers.remove(id) == null) return
+        if (id == activeId) {
+            abortCurrent()
+            if (pointers.isNotEmpty()) mode = Mode.IGNORE
+        } else if (id == pinchA || id == pinchB) {
+            mode = Mode.IGNORE
+        }
+        if (pointers.isEmpty()) reset()
+    }
+
+    /**
+     * ACTION_CANCEL of the MotionEvent stream: cancels everything except a stroke owned by
+     * [keepId], a pointer that does not come from that stream (the BOOX raw pen).
+     */
+    fun cancelAllExcept(keepId: Int) {
+        val keep = pointers[keepId]
+        if (keep == null || mode != Mode.STROKE || activeId != keepId) {
+            cancel()
+            return
+        }
+        pointers.clear()
+        pointers[keepId] = keep
+    }
+
     /** After the owning pointer lifts, ignore whatever is still touching until everything is up. */
     private fun finishPrimary() {
         mode = if (pointers.size > 1) Mode.IGNORE else Mode.IDLE

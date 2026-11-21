@@ -43,6 +43,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // BOOX only (no-op elsewhere): hidden-API exemption + Onyx SDK init + EPD / stylus probe,
+        // before any canvas creates a TouchHelper.
+        OnyxEinkBridge.init(this)
         container.updater.checkOnStartupIfDue()
         setContent {
             XiaonuoTheme { XiaonuoApp(container) }

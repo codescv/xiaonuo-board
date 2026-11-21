@@ -145,11 +145,9 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
         EinkCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("BOOX 墨水屏与交互体验", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-                Text(
-                    if (OnyxEinkBridge.isAvailable) "已检测到 BOOX Onyx EPD 控制器 ✓"
-                    else "未检测到 Onyx SDK（普通 Android 设备，自动降级为标准刷新）",
-                    fontSize = 14.sp, color = Eink.Muted,
-                )
+                // Real runtime state: BOOX hardware? SDK initialized? TouchHelper raw pen armed?
+                Text(OnyxEinkBridge.statusText, fontSize = 14.sp, color = Eink.Muted)
+                OnyxEinkBridge.deviceDetail?.let { Text("Onyx 设备：$it", fontSize = 12.sp, color = Eink.Muted) }
                 Text("默认刷新模式", fontWeight = FontWeight.Bold)
                 EinkSegmented(
                     listOf(EinkMode.REGAL to "REGAL 清晰（推荐）", EinkMode.NORMAL to "标准", EinkMode.FAST to "快速"),

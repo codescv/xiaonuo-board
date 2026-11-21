@@ -171,4 +171,81 @@ class InputRouterTest {
         assertTrue(c.paint.all { it == 0 })
         assertEquals(Mode.IDLE, r.mode)
     }
+
+    // ---- BOOX TouchHelper raw pen stream (pointer RAW) alongside the MotionEvent stream ----
+
+    private val RAW = 0x7EAD_0001
+
+    @Test
+    fun rawPenStrokePaintsAndDuplicateMotionPenIsIgnored() {
+        val (c, r, rec) = setup()
+        r.down(RAW, PointerKind.STYLUS, 25f, 30f) // raw stream first
+        r.down(0, PointerKind.STYLUS, 25f, 30f) // same physical stroke via MotionEvents
+        r.move(RAW, 30f, 35f)
+        r.move(0, 75f, 35f) // even a diverging duplicate cannot paint
+        r.up(RAW, 30f, 35f)
+        r.up(0, 75f, 35f)
+        assertEquals(1, rec.strokeStarts)
+        assertEquals(1, rec.strokeEnds)
+        assertEquals(0, rec.cancelled)
+        assertEquals(red, c.paint[35 * c.width + 30])
+        assertEquals(0, c.paint[35 * c.width + 75])
+        assertEquals(Mode.IDLE, r.mode)
+    }
+
+    @Test
+    fun motionCancelDoesNotKillARawStroke() {
+        val (c, r, rec) = setup()
+        r.down(1, PointerKind.FINGER, 70f, 40f) // palm resting
+        r.down(RAW, PointerKind.STYLUS, 25f, 30f) // pen priority: palm gesture aborted
+        r.cancelAllExcept(RAW) // MotionEvent stream sends ACTION_CANCEL
+        r.move(RAW, 30f, 35f)
+        r.up(RAW, 30f, 35f)
+        assertEquals(red, c.paint[35 * c.width + 30])
+        assertEquals("only the finger stroke was rolled back", 1, rec.cancelled)
+        assertEquals(Mode.IDLE, r.mode)
+    }
+
+    @Test
+    fun motionCancelWithoutRawStrokeCancelsEverything() {
+        val (c, r, rec) = setup()
+        r.down(0, PointerKind.STYLUS, 25f, 30f)
+        r.move(0, 30f, 35f)
+        r.cancelAllExcept(RAW)
+        assertEquals(1, rec.cancelled)
+        assertTrue(c.paint.all { it == 0 })
+        assertEquals(Mode.IDLE, r.mode)
+    }
+
+    @Test
+    fun cancelPointerRollsBackOnlyTheStrokeItOwns() {
+        val (c, r, rec) = setup()
+        r.down(RAW, PointerKind.STYLUS, 25f, 30f)
+        r.move(RAW, 30f, 35f)
+        r.down(1, PointerKind.FINGER, 70f, 40f) // palm while drawing
+        r.cancelPointer(RAW) // raw drawing paused mid-stroke
+        assertEquals(1, rec.cancelled)
+        assertTrue(c.paint.all { it == 0 })
+        assertEquals("palm left over is ignored until lifted", Mode.IGNORE, r.mode)
+        r.move(1, 80f, 50f)
+        r.up(1, 80f, 50f)
+        assertEquals(0, c.paint[50 * c.width + 80])
+        assertEquals(Mode.IDLE, r.mode)
+        // Late raw events for the dropped pointer are inert.
+        r.move(RAW, 40f, 40f)
+        r.up(RAW, 40f, 40f)
+        assertEquals(1, rec.strokeEnds)
+        r.cancelPointer(RAW)
+        assertEquals(1, rec.cancelled)
+    }
+
+    @Test
+    fun cancelPointerOfAnUninvolvedPointerKeepsTheStroke() {
+        val (c, r, _) = setup()
+        r.down(0, PointerKind.STYLUS, 25f, 30f)
+        r.cancelPointer(RAW) // not registered
+        r.move(0, 30f, 35f)
+        r.up(0, 30f, 35f)
+        assertEquals(red, c.paint[35 * c.width + 30])
+    }
 }
