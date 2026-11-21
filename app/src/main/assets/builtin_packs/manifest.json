@@ -395,14 +395,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_01_line.png",
    "ref": "peppa/peppa_01_ref.webp",
-   "regions": 45,
+   "regions": 20,
    "palette": [
-    "#54CCFC",
-    "#FCB4B4",
+    "#FCB4CC",
     "#E43C3C",
-    "#FCB424",
-    "#FC549C",
-    "#E4849C"
+    "#FCE454",
+    "#E4849C",
+    "#CC5484",
+    "#9D4EDD"
    ]
   },
   {
@@ -413,14 +413,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_02_line.png",
    "ref": "peppa/peppa_02_ref.webp",
-   "regions": 28,
+   "regions": 22,
    "palette": [
-    "#B4E4FC",
-    "#FCB4B4",
-    "#9CCC6C",
-    "#246CCC",
-    "#FCB454",
-    "#CCCC84"
+    "#FCB4CC",
+    "#6CCC3C",
+    "#0C84CC",
+    "#24843C",
+    "#FF6F00",
+    "#9D4EDD"
    ]
   },
   {
@@ -431,14 +431,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_03_line.png",
    "ref": "peppa/peppa_03_ref.webp",
-   "regions": 37,
+   "regions": 22,
    "palette": [
-    "#3CB4E4",
+    "#9C5424",
     "#FCB4CC",
-    "#FCE424",
-    "#CCE4FC",
-    "#E42424",
-    "#FC8424"
+    "#E43C3C",
+    "#3CB4E4",
+    "#FCE40C",
+    "#FCE43C"
    ]
   },
   {
@@ -449,14 +449,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_04_line.png",
    "ref": "peppa/peppa_04_ref.webp",
-   "regions": 63,
+   "regions": 23,
    "palette": [
-    "#54B484",
-    "#FC9CB4",
-    "#FCE424",
-    "#E42424",
-    "#2454CC",
-    "#0CB424"
+    "#FCB4CC",
+    "#E45454",
+    "#FCCC3C",
+    "#5484CC",
+    "#E40C0C",
+    "#FC6CB4"
    ]
   },
   {
@@ -467,14 +467,14 @@
    "difficulty": "easy",
    "line": "peppa/peppa_05_line.png",
    "ref": "peppa/peppa_05_ref.webp",
-   "regions": 43,
+   "regions": 24,
    "palette": [
-    "#84CCFC",
-    "#6CCC54",
-    "#FCE40C",
-    "#FC9C9C",
-    "#E42424",
-    "#0CB4E4"
+    "#FCB4CC",
+    "#E43C3C",
+    "#0C6CCC",
+    "#843C24",
+    "#FCE424",
+    "#FCE4CC"
    ]
   },
   {
@@ -485,14 +485,14 @@
    "difficulty": "standard",
    "line": "peppa/peppa_06_line.png",
    "ref": "peppa/peppa_06_ref.webp",
-   "regions": 65,
+   "regions": 58,
    "palette": [
-    "#FC8484",
-    "#E43C3C",
-    "#FCE424",
-    "#CCCCE4",
-    "#543C24",
-    "#243C84"
+    "#FC3C3C",
+    "#FCB4CC",
+    "#24B49C",
+    "#FC843C",
+    "#2484CC",
+    "#FC84CC"
    ]
   },
   {
@@ -503,68 +503,68 @@
    "difficulty": "standard",
    "line": "peppa/peppa_07_line.png",
    "ref": "peppa/peppa_07_ref.webp",
-   "regions": 53,
+   "regions": 44,
    "palette": [
-    "#FC9C9C",
-    "#FC5424",
-    "#B49C84",
-    "#0CB4CC",
-    "#FCCCB4",
-    "#9C6C6C"
+    "#FCE49C",
+    "#FCB4E4",
+    "#FCB43C",
+    "#FC84CC",
+    "#E45454",
+    "#249CE4"
    ]
   },
   {
    "id": "peppa_08",
    "category": "peppa",
    "index": 8,
-   "title": "爷爷的菜园和小火车",
+   "title": "佩奇和乔治坐小火车",
    "difficulty": "standard",
    "line": "peppa/peppa_08_line.png",
    "ref": "peppa/peppa_08_ref.webp",
-   "regions": 67,
+   "regions": 47,
    "palette": [
-    "#84CCFC",
+    "#E43C3C",
+    "#2484E4",
+    "#54B454",
     "#FCB4CC",
-    "#E42424",
-    "#FCE40C",
-    "#FC8424",
-    "#3CCC3C"
+    "#FCCC3C",
+    "#E4FCFC"
    ]
   },
   {
    "id": "peppa_09",
    "category": "peppa",
    "index": 9,
-   "title": "游乐场坐热气球",
+   "title": "佩奇和乔治坐热气球",
    "difficulty": "standard",
    "line": "peppa/peppa_09_line.png",
    "ref": "peppa/peppa_09_ref.webp",
    "regions": 29,
    "palette": [
-    "#84E4FC",
-    "#6CB424",
-    "#E4B46C",
-    "#FC8424",
-    "#FCB4B4",
-    "#2484CC"
+    "#6CCCFC",
+    "#CC9C54",
+    "#0C9C3C",
+    "#FCE424",
+    "#84B43C",
+    "#E43C3C"
    ]
   },
   {
    "id": "peppa_10",
    "category": "peppa",
    "index": 10,
-   "title": "佩奇一家海边度假",
+   "title": "佩奇和乔治海边堆沙堡",
    "difficulty": "standard",
    "line": "peppa/peppa_10_line.png",
    "ref": "peppa/peppa_10_ref.webp",
-   "regions": 54,
+   "regions": 28,
    "palette": [
-    "#FCCCCC",
-    "#FCE40C",
-    "#E4B40C",
-    "#CC9C6C",
-    "#3CB454",
-    "#E43C3C"
+    "#84E4FC",
+    "#FCB4E4",
+    "#E4CC6C",
+    "#E45454",
+    "#0C9CE4",
+    "#FC2424"
    ]
   },
   {
