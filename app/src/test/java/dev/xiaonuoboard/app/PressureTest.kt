@@ -54,6 +54,14 @@ class PressureTest {
         assertEquals(4095f, n.scaleMax, 0f)
         assertEquals(RawPressureNormalizer.DEFAULT_MAX, RawPressureNormalizer(0f).scaleMax, 0f)
         assertEquals(RawPressureNormalizer.DEFAULT_MAX, RawPressureNormalizer(Float.NaN).scaleMax, 0f)
+        assertEquals(RawPressureNormalizer.DEFAULT_MAX, RawPressureNormalizer(-1f).scaleMax, 0f)
+        // A firmware reporting an already-normalized [0, 1] scale is honoured…
+        val unit = RawPressureNormalizer(1f)
+        assertEquals(0.3f, unit.normalize(0.3f), 1e-6f)
+        assertEquals(1f, unit.scaleMax, 0f)
+        // …and jumps to the Wacom range (not the first raw sample) if raw units arrive after all.
+        assertEquals(800f / 4096f, unit.normalize(800f), 1e-6f)
+        assertEquals(RawPressureNormalizer.DEFAULT_MAX, unit.scaleMax, 0f)
     }
 
     // ---------------- curve ----------------

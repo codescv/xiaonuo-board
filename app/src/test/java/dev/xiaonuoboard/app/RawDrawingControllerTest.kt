@@ -731,6 +731,16 @@ class RawDrawingControllerTest {
     }
 
     @Test
+    fun failedFirstOpenPublishesTheFailedStateForTheDiagnosticHeader() {
+        dev.xiaonuoboard.app.eink.DiagLog.setState("rawDrawing", "stale")
+        val r = Rig()
+        r.backend.openOk = false
+        r.armed()
+        assertTrue(r.c.isFailed)
+        assertTrue(dev.xiaonuoboard.app.eink.DiagLog.stateSnapshot()["rawDrawing"]!!.contains("failed=true"))
+    }
+
+    @Test
     fun beginRecordsWhetherThePenLayerWasAlreadyLive() {
         val r = Rig().armed()
         r.stroke()

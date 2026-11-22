@@ -36,8 +36,9 @@ class DiagRingBuffer(
     val dropped: Long get() = synchronized(lock) { total - size }
 
     fun log(tag: String, msg: String) {
-        val t = clockMs()
         synchronized(lock) {
+            // Clock read under the lock: buffer order == timestamp order across threads.
+            val t = clockMs()
             times[next] = t
             tags[next] = tag
             msgs[next] = msg

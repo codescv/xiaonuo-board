@@ -319,7 +319,7 @@ class RawDrawingController(
         isFailed = true
         failureReason = reason
         val burst = isPenUpFlushPending
-        if (isOpen) closeBackend()
+        if (isOpen) closeBackend() else publishState()
         onFailure(reason)
         if (burst) onPenUpFlush() // the hardware trace is still on the panel
     }

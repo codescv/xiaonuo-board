@@ -574,7 +574,8 @@ class ColoringCanvasView(
                 if (flush.mode != EinkMode.FAST) raw.hidePenLayer()
                 val t0 = System.nanoTime()
                 OnyxEinkBridge.refreshRect(this, rect, flush.mode)
-                if (DiagLog.enabled) {
+                // Frames during a stroke fold into its summary: no per-frame string there.
+                if (DiagLog.enabled && !stats.active) {
                     lastFlushInfo = "refresh=${flush.mode.name} epdCall=${DiagLog.ms(System.nanoTime() - t0)}ms rect=${rect.toShortString()}" +
                         if (flush.viewRect.isEmpty) "" else " +trace"
                 }

@@ -61,7 +61,7 @@ object StrokePressure {
  * thread only, like the raw pen callbacks).
  */
 class RawPressureNormalizer(reportedMax: Float) {
-    var scaleMax: Float = if (reportedMax.isNaN() || reportedMax <= 1f || reportedMax.isInfinite()) DEFAULT_MAX else reportedMax
+    var scaleMax: Float = if (reportedMax.isNaN() || reportedMax <= 0f || reportedMax.isInfinite()) DEFAULT_MAX else reportedMax
         private set
     /** Largest raw reading seen so far (diagnostics). */
     var observedMax: Float = 0f
@@ -70,7 +70,11 @@ class RawPressureNormalizer(reportedMax: Float) {
     fun normalize(raw: Float): Float {
         if (!raw.isNaN() && !raw.isInfinite()) {
             if (raw > observedMax) observedMax = raw
-            if (raw > scaleMax && raw <= SANITY_MAX) scaleMax = raw
+            if (raw > scaleMax && raw <= SANITY_MAX) {
+                // A "normalized" (≤ 1) reported scale that receives raw digitizer units: jump to at
+                // least the common Wacom range instead of saturating at the first sample.
+                scaleMax = if (scaleMax <= 1f && raw > 1f) maxOf(raw, DEFAULT_MAX) else raw
+            }
         }
         return StrokePressure.normalize(raw, scaleMax)
     }
