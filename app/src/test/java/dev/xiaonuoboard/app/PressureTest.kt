@@ -76,9 +76,10 @@ class PressureTest {
             prev = m
         }
         assertEquals(StrokePressure.MAX_MULT, StrokePressure.multiplier(1f), 1e-5f)
-        assertTrue("light touch stays visible", StrokePressure.multiplier(0.05f) in 0.42f..0.6f)
-        assertTrue("normal press ≈ the chosen size", StrokePressure.multiplier(0.45f) in 0.88f..1.02f)
-        assertTrue("firm press is fatter", StrokePressure.multiplier(0.9f) > 1.25f)
+        assertEquals(StrokePressure.MAX_MULT, StrokePressure.multiplier(StrokePressure.FULL_PRESSURE), 1e-5f)
+        assertTrue("light touch stays visible & thin", StrokePressure.multiplier(0.05f) in 0.42f..0.58f)
+        assertTrue("typical Nova Air C press ≈ chosen size", StrokePressure.multiplier(0.25f) in 0.85f..1.00f)
+        assertTrue("firm Nova Air C press reaches bold width", StrokePressure.multiplier(0.50f) > 1.30f)
         assertEquals(StrokePressure.NEUTRAL, StrokePressure.multiplier(Float.NaN), 0f)
         assertEquals(StrokePressure.NEUTRAL, StrokePressure.multiplier(0f), 0f)
         assertEquals(StrokePressure.MAX_MULT, StrokePressure.multiplier(7f), 1e-5f) // clamped

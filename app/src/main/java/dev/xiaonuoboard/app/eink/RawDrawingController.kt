@@ -473,14 +473,15 @@ class RawDrawingController(
 
     companion object {
         const val MAX_MISSES = 3
-        /** ≈2 frames: lets the post-stroke partial refresh reach the EPD before scribble resumes. */
-        const val RENDER_RESUME_DELAY_MS = 32L
+        /** ≈1 frame: lets the post-stroke partial refresh reach the EPD while minimizing the resume gap. */
+        const val RENDER_RESUME_DELAY_MS = 16L
         /** Resume fallback when the refresh's frame-drawn signal never comes (e.g. no draw happened). */
         const val RENDER_RESUME_FALLBACK_MS = 120L
         /**
          * Pen idle before a burst of hardware-drawn strokes gets its single colour refresh. Kids'
-         * back-and-forth coloring lifts the pen for ~50–300 ms; Onyx's own pen-up refresh waits 500 ms.
+         * back-and-forth coloring lifts the pen for ~50–500 ms; 700 ms keeps the hardware pen layer
+         * live across bursts without colliding with mid-burst GU waveforms.
          */
-        const val PEN_UP_FLUSH_DELAY_MS = 450L
+        const val PEN_UP_FLUSH_DELAY_MS = 700L
     }
 }

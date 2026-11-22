@@ -15,8 +15,8 @@ android {
         applicationId = "dev.xiaonuoboard.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.1.6"
+        versionCode = 10
+        versionName = "1.1.7"
     }
 
     buildTypes {

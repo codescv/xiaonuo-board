@@ -10,19 +10,21 @@ import kotlin.math.pow
  * reported as [NO_PRESSURE] and leaves the brush at its current width. Fingers, mice and the eraser
  * are never pressure-modulated (see [ColoringCanvasController.strokeBegin]).
  *
- * Kid-friendly curve: `MIN + (MAX - MIN) · p^GAMMA` — a light touch still leaves a clearly visible
- * line (~0.42× the chosen 细/中/粗 radius), a normal press is ≈ the chosen size (~0.95×) and a firm
- * press gets noticeably fatter (1.35×). The concave gamma makes the low end responsive, because
- * young kids rarely press hard.
+ * Kid-friendly curve calibrated to real BOOX Nova Air C Wacom EMR telemetry (where normal-to-firm
+ * drawing reaches ~0.18–0.55 of the 4095 raw scale): `MIN + (MAX - MIN) · (p / FULL)^GAMMA` —
+ * a light touch draws a crisp thin line (~0.35–0.50×), a typical press sits near the chosen
+ * 细/中/粗 radius (~0.91× at p=0.25), and a firm press (p≥0.55) reaches full 1.45× bold width.
  */
 object StrokePressure {
     /** Marker for "no usable pressure reading". */
     const val NO_PRESSURE = Float.NaN
     /** Width multiplier used when the stroke has no usable pressure at all. */
     const val NEUTRAL = 1f
-    const val MIN_MULT = 0.42f
-    const val MAX_MULT = 1.35f
-    const val GAMMA = 0.7f
+    const val MIN_MULT = 0.35f
+    const val MAX_MULT = 1.45f
+    /** Normalized pressure at which full [MAX_MULT] width is reached (calibrated to BOOX Nova Air C). */
+    const val FULL_PRESSURE = 0.55f
+    const val GAMMA = 0.85f
     /** EMA weight of the newest sample: light smoothing so the width never jumps between points. */
     const val SMOOTHING = 0.35f
     /** Below this a reading is treated as noise (e.g. the digitizer's touch-down ramp). */
@@ -44,7 +46,7 @@ object StrokePressure {
     /** Radius multiplier for a normalized pressure; [NEUTRAL] for an unusable reading. */
     fun multiplier(normalized: Float): Float {
         if (!isValid(normalized)) return NEUTRAL
-        val p = normalized.coerceIn(0f, 1f)
+        val p = (normalized / FULL_PRESSURE).coerceIn(0f, 1f)
         return MIN_MULT + (MAX_MULT - MIN_MULT) * p.pow(GAMMA)
     }
 

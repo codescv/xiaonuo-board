@@ -675,8 +675,8 @@ class RawDrawingControllerTest {
     }
 
     @Test
-    fun debounceIsLongerThanAKidsPenLiftButShorterThanOnyxsOwnPenUpRefresh() {
-        assertTrue(RawDrawingController.PEN_UP_FLUSH_DELAY_MS in 300L..500L)
+    fun debounceCoversBurstPenLiftsWithoutFeelingSluggish() {
+        assertTrue(RawDrawingController.PEN_UP_FLUSH_DELAY_MS in 500L..1000L)
         assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS > RawDrawingController.RENDER_RESUME_DELAY_MS)
     }
     // ---------------- pressure propagation / pressure pen style ----------------
