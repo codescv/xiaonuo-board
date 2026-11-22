@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import dev.xiaonuoboard.app.ai.GeminiConfig
 import dev.xiaonuoboard.app.ai.GeminiModels
+import dev.xiaonuoboard.app.eink.BooxSdkMode
 import dev.xiaonuoboard.app.eink.EinkMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ data class AppSettings(
     val baseUrl: String = GeminiModels.DEFAULT_BASE_URL,
     val model: String = GeminiModels.DEFAULT,
     val einkMode: EinkMode = EinkMode.REGAL,
+    val booxSdkMode: BooxSdkMode = BooxSdkMode.OFF,
     val soundEnabled: Boolean = false,
     val stylusOnly: Boolean = false,
     val stayInsideLines: Boolean = true,
@@ -39,6 +41,7 @@ class SettingsStore(context: Context) {
         baseUrl = prefs.getString(K_BASE, GeminiModels.DEFAULT_BASE_URL) ?: GeminiModels.DEFAULT_BASE_URL,
         model = prefs.getString(K_MODEL, GeminiModels.DEFAULT) ?: GeminiModels.DEFAULT,
         einkMode = runCatching { EinkMode.valueOf(prefs.getString(K_EINK, EinkMode.REGAL.name)!!) }.getOrDefault(EinkMode.REGAL),
+        booxSdkMode = runCatching { BooxSdkMode.valueOf(prefs.getString(K_BOOX_SDK_MODE, BooxSdkMode.OFF.name)!!) }.getOrDefault(BooxSdkMode.OFF),
         soundEnabled = prefs.getBoolean(K_SOUND, false),
         stylusOnly = prefs.getBoolean(K_STYLUS, false),
         stayInsideLines = prefs.getBoolean(K_INSIDE, true),
@@ -53,6 +56,7 @@ class SettingsStore(context: Context) {
             .putString(K_BASE, s.baseUrl)
             .putString(K_MODEL, s.model)
             .putString(K_EINK, s.einkMode.name)
+            .putString(K_BOOX_SDK_MODE, s.booxSdkMode.name)
             .putBoolean(K_SOUND, s.soundEnabled)
             .putBoolean(K_STYLUS, s.stylusOnly)
             .putBoolean(K_INSIDE, s.stayInsideLines)
@@ -67,6 +71,7 @@ class SettingsStore(context: Context) {
         const val K_BASE = "gemini_base_url"
         const val K_MODEL = "gemini_model"
         const val K_EINK = "eink_mode"
+        const val K_BOOX_SDK_MODE = "boox_sdk_mode"
         const val K_SOUND = "sound_enabled"
         const val K_STYLUS = "stylus_only"
         const val K_INSIDE = "stay_inside"

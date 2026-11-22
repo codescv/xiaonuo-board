@@ -43,6 +43,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Apply saved BOOX SDK mode before init/canvas creation.
+        OnyxEinkBridge.setSdkMode(container.settings.current.booxSdkMode)
         // BOOX only (no-op elsewhere): hidden-API exemption + Onyx SDK init + EPD / stylus probe,
         // before any canvas creates a TouchHelper.
         OnyxEinkBridge.init(this)
@@ -80,7 +82,8 @@ fun XiaonuoApp(container: AppContainer) {
     // A canvas keeps its identity when its first auto-save assigns an artworkId (Screen.Canvas is
     // replaced in place): no root refresh then, it could land mid-stroke under the BOOX pen layer.
     val screenKey: Any = if (screen is Screen.Canvas) "canvas:${screen.pageId}" else screen
-    LaunchedEffect(screenKey, settings.einkMode) {
+    LaunchedEffect(screenKey, settings.einkMode, settings.booxSdkMode) {
+        OnyxEinkBridge.setSdkMode(settings.booxSdkMode)
         // Browsing screens use the parent-selected clear mode; each screen switch gets one clean refresh.
         OnyxEinkBridge.setViewDefaultMode(view, settings.einkMode)
         OnyxEinkBridge.refresh(view, settings.einkMode)

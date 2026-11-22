@@ -3,6 +3,7 @@ package dev.xiaonuoboard.app
 import android.content.ContextWrapper
 import android.graphics.Rect
 import android.view.View
+import dev.xiaonuoboard.app.eink.BooxSdkMode
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.EinkSupport
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
@@ -74,5 +75,22 @@ class OnyxEinkBridgeTest {
         OnyxEinkBridge.clearGhosting(v)
         assertEquals(2, v.invalidates)
         assertFalse(OnyxEinkBridge.isAvailable)
+    }
+
+    @Test
+    fun sdkModePersistsInBridgeAndDiagSummaryWithoutTouchingSdkOffBoox() {
+        val original = OnyxEinkBridge.sdkMode
+        try {
+            for (mode in BooxSdkMode.entries) {
+                OnyxEinkBridge.setSdkMode(mode)
+                assertEquals(mode, OnyxEinkBridge.sdkMode)
+                assertTrue(OnyxEinkBridge.diagSummary().contains("sdkMode=${mode.name}"))
+                assertFalse(OnyxEinkBridge.isAvailable)
+                assertFalse(OnyxEinkBridge.isTouchHelperAvailable)
+            }
+            assertFalse("Onyx classes were touched off BOOX", OnyxEinkBridge.sdkTouched)
+        } finally {
+            OnyxEinkBridge.setSdkMode(original)
+        }
     }
 }

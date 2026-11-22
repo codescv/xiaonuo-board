@@ -148,8 +148,26 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("BOOX 墨水屏、交互与诊断", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
                 // Real runtime state: BOOX hardware? SDK initialized? TouchHelper raw pen armed?
-                Text(OnyxEinkBridge.statusText, fontSize = 14.sp, color = Eink.Muted)
+                // Keying off settings.booxSdkMode ensures statusText recomposes immediately on toggle.
+                val booxStatus = remember(settings.booxSdkMode) { OnyxEinkBridge.statusText }
+                Text(booxStatus, fontSize = 14.sp, color = Eink.Muted)
                 OnyxEinkBridge.deviceDetail?.let { Text("Onyx 设备：$it", fontSize = 12.sp, color = Eink.Muted) }
+                Text("BOOX SDK 模式", fontWeight = FontWeight.Bold)
+                EinkSegmented(
+                    listOf(
+                        dev.xiaonuoboard.app.eink.BooxSdkMode.OFF to "关闭 SDK（标准）",
+                        dev.xiaonuoboard.app.eink.BooxSdkMode.EPD_ONLY to "仅墨水屏快刷",
+                        dev.xiaonuoboard.app.eink.BooxSdkMode.FULL to "完整（直绘）",
+                    ),
+                    settings.booxSdkMode,
+                ) { mode ->
+                    OnyxEinkBridge.setSdkMode(mode)
+                    container.settings.update { it.copy(booxSdkMode = mode) }
+                }
+                Text(
+                    "「关闭 SDK」与未集成 SDK 时完全一致；「仅墨水屏快刷」实时显示真实颜色并保留不涂出线；「完整（直绘）」启用硬件手写层。",
+                    fontSize = 12.sp, color = Eink.Muted,
+                )
                 Text("默认刷新模式", fontWeight = FontWeight.Bold)
                 EinkSegmented(
                     listOf(EinkMode.REGAL to "REGAL 清晰（推荐）", EinkMode.NORMAL to "标准", EinkMode.FAST to "快速"),

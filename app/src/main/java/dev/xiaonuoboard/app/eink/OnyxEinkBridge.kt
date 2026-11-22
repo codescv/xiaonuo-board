@@ -18,10 +18,22 @@ enum class EinkMode(val label: String) {
     FULL("全刷"),
 }
 
+/** User-selectable BOOX SDK integration level (Settings → 「BOOX SDK 模式」). */
+enum class BooxSdkMode(val label: String) {
+    /** Completely bypass Onyx SDK (identical to pre-SDK standard Android `View.invalidate()`). */
+    OFF("关闭 SDK"),
+    /** BOOX EPD partial/fast waveforms only; paint strokes directly in real color without TouchHelper. */
+    EPD_ONLY("仅快刷"),
+    /** Full BOOX SDK: EPD waveforms + TouchHelper hardware raw drawing overlay. */
+    FULL("完整（直绘）"),
+}
+
 /** What the BOOX integration is actually doing on this device (Settings → 「BOOX 墨水屏」). */
 enum class EinkSupport {
     /** Not a BOOX device (or a JVM test): standard `View.invalidate()` everywhere. */
     NOT_BOOX,
+    /** BOOX hardware detected, but user manually switched BOOX SDK mode to [BooxSdkMode.OFF]. */
+    BOOX_SDK_DISABLED,
     /** BOOX hardware detected but the bundled Onyx SDK failed to initialize → standard refresh. */
     BOOX_SDK_FAILED,
     /** BOOX EPD partial / fast refresh active; pen strokes use the standard (non-raw) path. */
@@ -80,6 +92,17 @@ object OnyxEinkBridge {
     @Volatile private var rawDrawingFailure: String? = null
     @Volatile private var maxPressure: Float = 0f
 
+    /** User-selected BOOX SDK mode (persisted in Settings). Defaults to [BooxSdkMode.OFF]. */
+    @Volatile
+    var sdkMode: BooxSdkMode = BooxSdkMode.OFF
+        private set
+
+    fun setSdkMode(mode: BooxSdkMode) {
+        if (sdkMode == mode) return
+        sdkMode = mode
+        DiagLog.log(DiagLog.ONYX, "sdkMode=${mode.name}")
+    }
+
     /**
      * One-time setup; call from `Activity.onCreate` before any canvas is created. No-op off BOOX.
      * Probes the EPD controller and whether TouchHelper raw drawing can run here.
@@ -122,7 +145,8 @@ object OnyxEinkBridge {
 
     /** Multi-line BOOX status block for the diagnostic log header. */
     fun diagSummary(): String = buildString {
-        append("isBooxDevice=").append(isBooxDevice)
+        append("sdkMode=").append(sdkMode.name)
+        append(" isBooxDevice=").append(isBooxDevice)
         append(" isAvailable=").append(isAvailable)
         append(" hasTouchHelper=").append(isTouchHelperAvailable)
         append(" touchHelperReady=").append(touchHelperReady)
@@ -134,16 +158,18 @@ object OnyxEinkBridge {
         append(" rawDrawingFailure=").append(rawDrawingFailure ?: "-")
     }
 
-    /** True when running on BOOX hardware with a working EPD controller (after [init]). */
-    val isAvailable: Boolean get() = isBooxDevice && epdReady
+    /** True when running on BOOX hardware with a working EPD controller and SDK not disabled by user. */
+    val isAvailable: Boolean get() = sdkMode != BooxSdkMode.OFF && isBooxDevice && epdReady
 
-    /** True when TouchHelper raw drawing may be used (BOOX + EPD + stylus + arm64, no runtime failure). */
-    val isTouchHelperAvailable: Boolean get() = isAvailable && touchHelperReady && rawDrawingFailure == null
+    /** True when TouchHelper raw drawing may be used (FULL mode + BOOX + EPD + stylus + arm64, no runtime failure). */
+    val isTouchHelperAvailable: Boolean
+        get() = sdkMode == BooxSdkMode.FULL && isAvailable && touchHelperReady && rawDrawingFailure == null
 
     val support: EinkSupport
         get() = when {
             !isBooxDevice -> EinkSupport.NOT_BOOX
-            !isAvailable -> EinkSupport.BOOX_SDK_FAILED
+            sdkMode == BooxSdkMode.OFF -> EinkSupport.BOOX_SDK_DISABLED
+            !epdReady -> EinkSupport.BOOX_SDK_FAILED
             isTouchHelperAvailable -> EinkSupport.BOOX_EPD_TOUCH_HELPER
             else -> EinkSupport.BOOX_EPD
         }
@@ -153,13 +179,15 @@ object OnyxEinkBridge {
         get() = when (support) {
             EinkSupport.NOT_BOOX ->
                 "未检测到 BOOX 设备（${Build.MANUFACTURER.orEmpty()} ${Build.MODEL.orEmpty()}）· 标准 Android 刷新模式"
+            EinkSupport.BOOX_SDK_DISABLED ->
+                "已检测到 BOOX ${Build.MODEL.orEmpty()} · 已关闭 BOOX SDK（标准 Android 刷新模式）"
             EinkSupport.BOOX_SDK_FAILED ->
                 "检测到 BOOX 设备，但 Onyx SDK 初始化失败（${failure ?: "未初始化"}）· 已降级为标准刷新"
             EinkSupport.BOOX_EPD_TOUCH_HELPER ->
-                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 + TouchHelper 低延迟笔迹（$SDK_VERSIONS）"
+                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 + TouchHelper 硬件直绘（$SDK_VERSIONS）"
             EinkSupport.BOOX_EPD -> {
-                val why = rawDrawingFailure ?: "未检测到手写笔或非 arm64 设备"
-                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 · 低延迟笔迹未启用（$why）"
+                val why = if (sdkMode == BooxSdkMode.EPD_ONLY) "当前为「仅墨水屏快刷」模式" else rawDrawingFailure ?: "未检测到手写笔或非 arm64 设备"
+                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 · 硬件直绘未启用（$why）"
             }
         }
 
