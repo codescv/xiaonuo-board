@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -122,7 +123,10 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("🔒 家长验证", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                KidIcons.ParentLock(Eink.Ink, Modifier.size(30.dp))
+                Text("家长验证", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            }
             Text("请回答：${question.text}", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Box(
                 Modifier.fillMaxWidth().height(60.dp).border(Eink.Border, Eink.Ink, Eink.Shape),
@@ -135,7 +139,7 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
             rows.forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { key ->
-                        EinkButton(key, modifier = Modifier.weight(1f), selected = key == "确定", fontSize = 22) {
+                        val onKey: () -> Unit = {
                             when (key) {
                                 "⌫" -> input = input.dropLast(1)
                                 "确定" -> if (gate.check(input)) onUnlocked() else {
@@ -143,6 +147,11 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
                                 }
                                 else -> if (input.length < 3) input += key
                             }
+                        }
+                        if (key == "⌫") {
+                            EinkIconButton(Modifier.weight(1f), onClick = onKey) { tint -> KidIcons.Backspace(tint, Modifier.size(34.dp)) }
+                        } else {
+                            EinkButton(key, modifier = Modifier.weight(1f), selected = key == "确定", fontSize = 22, onClick = onKey)
                         }
                     }
                 }

@@ -53,14 +53,26 @@ fun HomeScreen(
     var pageIndex by remember(tab.id) { mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Header
+        // Header (custom vector icons only — zero emoji)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            KidIcons.PaletteLogo(Eink.Ink, Modifier.size(52.dp))
             Column(Modifier.weight(1f)) {
-                Text("🎨 小诺画板", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                Text("选一张喜欢的画开始涂色吧", fontSize = 16.sp, color = Eink.Muted)
+                Text("小诺画板", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                Text("选一张喜欢的画开始涂色吧", fontSize = 16.sp, color = Eink.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            EinkButton("✨ AI 画坊 🔒") { onOpenAi() }
-            EinkButton(if (hasUpdate) "⬆️ 新版 🔒" else "⚙️ 🔒", selected = hasUpdate) { onOpenSettings() }
+            EinkIconTextButton(
+                "AI 画坊",
+                leading = { tint -> KidIcons.MagicWand(tint, Modifier.size(28.dp)) },
+                trailing = { tint -> KidIcons.ParentLock(tint) },
+            ) { onOpenAi() }
+            EinkIconTextButton(
+                if (hasUpdate) "新版" else "",
+                selected = hasUpdate,
+                leading = { tint ->
+                    if (hasUpdate) KidIcons.UpdateArrow(tint, Modifier.size(28.dp)) else KidIcons.Gear(tint, Modifier.size(30.dp))
+                },
+                trailing = { tint -> KidIcons.ParentLock(tint) },
+            ) { onOpenSettings() }
         }
         // Tabs (two rows so every tab stays ≥ 56dp tall and readable)
         val rows = listOf(HomeTabs.ALL.take(4), HomeTabs.ALL.drop(4))
@@ -68,9 +80,13 @@ fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { t ->
                     val idx = HomeTabs.ALL.indexOf(t)
-                    EinkButton("${t.emoji} ${t.title}", selected = idx == selectedTab, modifier = Modifier.weight(1f), fontSize = 17) {
-                        onSelectTab(idx)
-                    }
+                    EinkIconTextButton(
+                        t.title,
+                        selected = idx == selectedTab,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 17,
+                        leading = { tint -> KidIcons.TabGlyph(t.icon, tint, Modifier.size(28.dp)) },
+                    ) { onSelectTab(idx) }
                 }
             }
         }
@@ -117,9 +133,19 @@ private fun <T> TwoByTwo(items: List<T>, cell: @Composable (T, Modifier) -> Unit
 @Composable
 fun Pager(current: Int, pageCount: Int, total: Int, onPage: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        EinkButton("◀ 上一页", enabled = current > 0, modifier = Modifier.weight(1f)) { onPage(current - 1) }
+        EinkIconTextButton(
+            "上一页",
+            enabled = current > 0,
+            modifier = Modifier.weight(1f),
+            leading = { tint -> KidIcons.Chevron(pointsLeft = true, tint = tint) },
+        ) { onPage(current - 1) }
         Text("第 ${current + 1} / $pageCount 页 · 共 $total 张", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        EinkButton("下一页 ▶", enabled = current < pageCount - 1, modifier = Modifier.weight(1f)) { onPage(current + 1) }
+        EinkIconTextButton(
+            "下一页",
+            enabled = current < pageCount - 1,
+            modifier = Modifier.weight(1f),
+            trailing = { tint -> KidIcons.Chevron(pointsLeft = false, tint = tint) },
+        ) { onPage(current + 1) }
     }
 }
 
@@ -146,13 +172,24 @@ private fun PageCard(page: ColoringPage, done: Boolean, modifier: Modifier, onCl
                 )
             }
             if (done) {
-                Box(
-                    Modifier.align(Alignment.TopStart).background(Eink.Ink, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
-                ) { Text("★ 已涂", color = Eink.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold) }
+                StarBadge("已涂", Modifier.align(Alignment.TopStart))
             }
         }
         Text(page.title, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(difficultyLabel(page.difficulty), fontSize = 14.sp, color = Eink.Muted)
+    }
+}
+
+/** Inverted ink badge with a vector star (已涂 / 已完成) — replaces the "★" glyph. */
+@Composable
+fun StarBadge(text: String, modifier: Modifier = Modifier, fontSize: Int = 14) {
+    Row(
+        modifier.background(Eink.Ink, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KidIcons.Star(Eink.White, Modifier.size((fontSize + 2).dp))
+        Text(text, color = Eink.White, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -175,7 +212,7 @@ private fun NewAiCard(modifier: Modifier, onClick: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("✨➕", fontSize = 44.sp)
+        KidIcons.NewPage(Eink.Ink, Modifier.size(72.dp))
         Spacer(Modifier.height(8.dp))
         Text("生成新涂色页", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
         Text("进入魔法画坊（家长锁）", fontSize = 14.sp, color = Eink.Muted)
@@ -194,7 +231,15 @@ private fun WorksGrid(
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (works.isEmpty()) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Bottom) {
+                    KidIcons.GalleryFrame(Eink.Ink, Modifier.size(96.dp))
+                    KidIcons.Crayon(Eink.Ink, Modifier.size(64.dp))
+                }
                 Text("还没有作品，去选一张画开始涂色吧！", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             return@Column

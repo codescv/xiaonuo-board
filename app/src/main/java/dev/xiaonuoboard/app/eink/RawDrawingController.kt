@@ -54,12 +54,29 @@ interface UiScheduler {
  * before a pause / close) and orphan moves / ends are dropped. The full point list is only used
  * when no per-point moves arrived.
  *
- * Refresh handshake (Onyx pattern): before the canvas issues one of its own partial refreshes (the
- * committed color stroke at pen-up, an undo, a reset…) [hidePenLayer] turns the hardware pen layer
- * off (`setRawDrawingRenderEnabled(false)`, i.e. leave scribble mode) so the refresh reaches the
- * panel and replaces the black hardware trace; once it is issued [schedulePenLayerResume] turns the
- * layer back on after [RENDER_RESUME_DELAY_MS]. A pen stroke starting earlier re-enables it
- * immediately (the canvas folds any still-pending refresh into that stroke's pen-up refresh).
+ * Pen-up refresh debounce (the Onyx `RawInputReader` pattern, verified in onyxsdk-pen 1.5.9: its own
+ * pen-up refresh is a 500 ms timer that every pen down / move cancels — `stopPenUpRefresh()` in
+ * `pressReceived` / `moveReceived` — while the pen rect keeps accumulating across strokes): after a
+ * committed hardware stroke the canvas calls [schedulePenUpFlush] instead of refreshing at once.
+ * The pen layer stays ON (`setRawDrawingRenderEnabled(true)`), so the firmware keeps drawing every
+ * following stroke of the burst instantly; only after [PEN_UP_FLUSH_DELAY_MS] of pen idle does
+ * [onPenUpFlush] fire, and the canvas hides the layer and issues ONE colour refresh for the whole
+ * burst. A pen stroke starting earlier just cancels the timer. Anything else that needs the panel
+ * (tool / colour / brush change, raw drawing disabled by an overlay / pause / bucket tool, a finger
+ * gesture, a failure) flushes the burst immediately.
+ *
+ * Why: `setRawDrawingRenderEnabled(false)` = `EpdController.leaveScribbleMode(view)` + pen state
+ * PAUSE, `(true)` = pen state DRAWING only (SFTouchRender / EpdPenManager); the raw reader is never
+ * paused by it, so callbacks keep flowing but the firmware draws NOTHING while paused. Hiding at
+ * every pen-up meant a stroke starting inside the hide → refresh → resume window (or while the UI
+ * thread was busy, since our resume only runs after the reader's `View.post`) was not drawn by the
+ * hardware at all and only appeared with the 250–450 ms Kaleido GU refresh at ITS pen-up, and
+ * strokes over a region whose GU waveform was still in flight waited for that waveform.
+ *
+ * Refresh handshake: before the canvas issues one of its own partial refreshes [hidePenLayer] turns
+ * the hardware pen layer off so the refresh reaches the panel and replaces the hardware trace; once
+ * it is issued (ideally once its frame was drawn) [schedulePenLayerResume] turns the layer back on.
+ * A pen stroke starting earlier re-enables it immediately.
  *
  * Finger gestures (pan / pinch / finger painting) hold the pen layer hidden for their whole
  * duration ([setFingerGesture]) so their frames reach the panel; a pen stroke always wins and
@@ -78,6 +95,8 @@ class RawDrawingController(
     private val sink: RawStrokeSink,
     private val scheduler: UiScheduler,
     private val onFailure: (String) -> Unit = {},
+    /** The pen burst is over (or must end now): hide the pen layer and refresh its strokes once. */
+    private val onPenUpFlush: () -> Unit = {},
 ) : RawPenListener {
 
     // ---- inputs ----
@@ -127,7 +146,15 @@ class RawDrawingController(
     var isFingerGestureActive = false
         private set
 
+    /**
+     * Committed hardware-drawn strokes are on the panel waiting for the debounced pen-up refresh
+     * (see class doc). Stays true while a following stroke of the same burst is drawing.
+     */
+    var isPenUpFlushPending = false
+        private set
+
     private val resumeRender = Runnable { if (!isFingerGestureActive) resumeRenderNow() }
+    private val penUpFlush = Runnable { flushPenUpNow() }
 
     // ---------------- inputs ----------------
 
@@ -164,6 +191,8 @@ class RawDrawingController(
 
     fun setStroke(width: Float, color: Int) {
         if (width == strokeWidth && color == strokeColor) return
+        // Tool / colour / brush changed: show the burst drawn with the previous style now.
+        flushPenUpNow()
         strokeWidth = width
         strokeColor = color
         if (isOpen && backend?.setStroke(width, color) == false) fail("setStrokeWidth/Color failed")
@@ -205,6 +234,7 @@ class RawDrawingController(
     private fun closeBackend() {
         abortRawStroke()
         scheduler.cancel(resumeRender)
+        cancelPenUpFlush() // detach / release: the view drops its pending refresh work itself
         isOpen = false
         isEnabled = false
         isRenderEnabled = false
@@ -228,6 +258,10 @@ class RawDrawingController(
             anchorX = offsetX
             anchorY = offsetY
             reanchorPending = false
+        } else {
+            // Raw drawing off (bucket tool, overlay, dialog, pause…): nothing keeps the burst's
+            // hardware trace company any more, refresh it in colour now.
+            flushPenUpNow()
         }
     }
 
@@ -248,8 +282,10 @@ class RawDrawingController(
         if (isFailed) return
         isFailed = true
         failureReason = reason
+        val burst = isPenUpFlushPending
         if (isOpen) closeBackend()
         onFailure(reason)
+        if (burst) onPenUpFlush() // the hardware trace is still on the panel
     }
 
     private fun abortRawStroke() {
@@ -270,6 +306,7 @@ class RawDrawingController(
         if (!isOpen || !isEnabled) return // stale: posted before a pause / close
         if (isRawStrokeActive) abortRawStroke() // previous stroke never ended
         isFingerGestureActive = false // pen priority: the router aborts any finger gesture
+        scheduler.cancel(penUpFlush) // same burst: keep the pen layer, refresh at the burst's end
         resumeRenderNow()
         if (!isEnabled) return // resuming the pen layer failed → raw drawing shut down
         rawEverDelivered = true
@@ -307,6 +344,7 @@ class RawDrawingController(
         penStrokeOpen = true
         rawSeenInPenStroke = isRawStrokeActive
         isFingerGestureActive = false
+        scheduler.cancel(penUpFlush)
         resumeRenderNow()
     }
 
@@ -322,18 +360,51 @@ class RawDrawingController(
         }
     }
 
-    /** Before an app refresh (e.g. pen-up): hide the hardware pen layer so the refresh shows. */
+    /**
+     * A committed hardware-drawn stroke ended: debounce its colour refresh to the end of the burst
+     * ([PEN_UP_FLUSH_DELAY_MS] of pen idle). If nothing keeps the pen layer live (raw drawing off,
+     * layer hidden, finger gesture) there is no burst to wait for and [onPenUpFlush] fires at once.
+     */
+    fun schedulePenUpFlush() {
+        scheduler.cancel(penUpFlush)
+        isPenUpFlushPending = true
+        if (!isOpen || !isEnabled || !isRenderEnabled || isFingerGestureActive) {
+            flushPenUpNow()
+            return
+        }
+        scheduler.postDelayed(penUpFlush, PEN_UP_FLUSH_DELAY_MS)
+    }
+
+    /** Ends a pending pen burst right now ([onPenUpFlush]); no-op without one. */
+    fun flushPenUpNow() {
+        scheduler.cancel(penUpFlush)
+        if (!isPenUpFlushPending) return
+        isPenUpFlushPending = false
+        onPenUpFlush()
+    }
+
+    /** The canvas is refreshing the burst's strokes itself (e.g. an undo refresh folded them in). */
+    fun cancelPenUpFlush() {
+        scheduler.cancel(penUpFlush)
+        isPenUpFlushPending = false
+    }
+
+    /** Before an app refresh: hide the hardware pen layer so the refresh shows (it covers the burst). */
     fun hidePenLayer() {
         scheduler.cancel(resumeRender) // a pending resume must not fire under this refresh
+        cancelPenUpFlush()
         if (!isOpen || !isEnabled || !isRenderEnabled) return
         if (backend?.setRenderEnabled(false) == true) isRenderEnabled = false else fail("setRawDrawingRenderEnabled(false) failed")
     }
 
-    /** The app refresh was issued: bring the hardware pen layer back shortly after. */
-    fun schedulePenLayerResume() {
+    /**
+     * The app refresh was issued: bring the hardware pen layer back after [delayMs] (by default
+     * ≈2 frames after the refresh's frame was drawn, so it reaches the EPD before scribble resumes).
+     */
+    fun schedulePenLayerResume(delayMs: Long = RENDER_RESUME_DELAY_MS) {
         scheduler.cancel(resumeRender) // at most one pending resume, always the latest
         if (isFingerGestureActive) return // resumed when the gesture ends
-        if (isOpen && isEnabled && !isRenderEnabled) scheduler.postDelayed(resumeRender, RENDER_RESUME_DELAY_MS)
+        if (isOpen && isEnabled && !isRenderEnabled) scheduler.postDelayed(resumeRender, delayMs)
     }
 
     /**
@@ -345,7 +416,9 @@ class RawDrawingController(
         if (active) {
             if (isRawStrokeActive) return
             isFingerGestureActive = true
+            val burst = isPenUpFlushPending
             hidePenLayer()
+            if (burst) onPenUpFlush() // the gesture's frames must not leave the burst's trace behind
         } else {
             isFingerGestureActive = false
             schedulePenLayerResume()
@@ -356,5 +429,12 @@ class RawDrawingController(
         const val MAX_MISSES = 3
         /** ≈2 frames: lets the post-stroke partial refresh reach the EPD before scribble resumes. */
         const val RENDER_RESUME_DELAY_MS = 32L
+        /** Resume fallback when the refresh's frame-drawn signal never comes (e.g. no draw happened). */
+        const val RENDER_RESUME_FALLBACK_MS = 120L
+        /**
+         * Pen idle before a burst of hardware-drawn strokes gets its single colour refresh. Kids'
+         * back-and-forth coloring lifts the pen for ~50–300 ms; Onyx's own pen-up refresh waits 500 ms.
+         */
+        const val PEN_UP_FLUSH_DELAY_MS = 450L
     }
 }

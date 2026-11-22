@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,8 +50,9 @@ fun GalleryScreen(
     var pageIndex by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            EinkButton("← 返回") { onBack() }
-            Text("🖼️ 我的作品画廊（${works.size} 幅）", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            EinkIconTextButton("返回", leading = { tint -> KidIcons.BackArrow(tint, Modifier.size(28.dp)) }) { onBack() }
+            KidIcons.GalleryFrame(Eink.Ink, Modifier.size(32.dp))
+            Text("我的作品画廊（${works.size} 幅）", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
         }
         val pageCount = maxOf(1, (works.size + 3) / 4)
         val current = pageIndex.coerceIn(0, pageCount - 1)
@@ -92,11 +94,12 @@ fun ArtworkCard(
     ) {
         Box(Modifier.weight(1f).fillMaxWidth().einkClick(onClick = onOpen)) {
             FileThumb(container.artworks.thumbFile(art.id), art.updatedAt, Modifier.fillMaxSize())
-            Box(Modifier.align(Alignment.TopStart).background(Eink.Ink, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                Text(
-                    if (art.completed) "★ 已完成" else "涂色中 ${(art.progress * 100).toInt()}%",
-                    color = Eink.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                )
+            if (art.completed) {
+                StarBadge("已完成", Modifier.align(Alignment.TopStart), fontSize = 13)
+            } else {
+                Box(Modifier.align(Alignment.TopStart).background(Eink.Ink, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Text("涂色中 ${(art.progress * 100).toInt()}%", color = Eink.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                }
             }
         }
         Text("${art.pageTitle} #${art.copyNo}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

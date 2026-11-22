@@ -165,13 +165,15 @@ object OnyxEinkBridge {
     }
 
     /**
-     * Refreshes a view with a given waveform. The plain `invalidate()` always runs first so the view
-     * redraws even if the firmware silently ignores the (reflective) Onyx call; the Onyx call then
-     * tags that pending draw with the waveform.
+     * Refreshes a view with a given waveform. The Onyx call (BOOX `View.invalidate(…, mode)` /
+     * `invalidateWithUpdateMode` via reflection) already invalidates the view tagged with the
+     * waveform; a plain `View.invalidate()` is only added when it did not (off BOOX, a throwing or —
+     * since the SDK's reflection swallows failures — silently ignored call: the view is then not
+     * dirty), so the canvas never stacks an untagged full-view invalidate on its tagged partial one.
      */
     fun refresh(view: View, mode: EinkMode = EinkMode.NORMAL) {
-        view.invalidate()
-        onyx("invalidate") { OnyxSdk.invalidate(view, mode) }
+        val tagged = onyx("invalidate") { OnyxSdk.invalidate(view, mode) }
+        if (!tagged || !view.isDirty) view.invalidate()
     }
 
     /** Partial refresh of a view-local rect (after a fill/stroke). */
@@ -180,9 +182,9 @@ object OnyxEinkBridge {
 
     fun refreshRect(view: View, left: Int, top: Int, right: Int, bottom: Int, mode: EinkMode = EinkMode.NORMAL) {
         // Rect-scoped View.invalidate is deprecated (HW-accelerated views redraw fully anyway); BOOX
-        // applies the partial waveform below, everything else just redraws.
-        view.invalidate()
-        onyx("invalidateRect") { OnyxSdk.invalidate(view, left, top, right, bottom, mode) }
+        // applies the partial waveform to the rect, everything else just redraws.
+        val tagged = onyx("invalidateRect") { OnyxSdk.invalidate(view, left, top, right, bottom, mode) }
+        if (!tagged || !view.isDirty) view.invalidate()
     }
 
     /** 「✨ 清残影」: one full GC flash to clear accumulated ghosting. */

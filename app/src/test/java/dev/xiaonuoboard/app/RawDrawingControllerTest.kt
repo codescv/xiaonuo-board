@@ -65,7 +65,8 @@ class RawDrawingControllerTest {
 
     private class FakeScheduler : UiScheduler {
         val pending = mutableListOf<Runnable>()
-        override fun postDelayed(task: Runnable, delayMs: Long) { pending += task }
+        val delays = mutableListOf<Long>()
+        override fun postDelayed(task: Runnable, delayMs: Long) { pending += task; delays += delayMs }
         override fun cancel(task: Runnable) { pending.removeAll { it === task } }
         fun runAll() { val copy = pending.toList(); pending.clear(); copy.forEach { it.run() } }
     }
@@ -79,13 +80,23 @@ class RawDrawingControllerTest {
         val scheduler = FakeScheduler()
         var factoryCalls = 0
         var failure: String? = null
+        var flushes = 0
+        /** What the canvas does on a pen-up flush: hide the layer, refresh, resume after the frame. */
+        var flushLikeCanvas = false
         lateinit var listener: RawPenListener
-        val c = RawDrawingController(
+        val c: RawDrawingController = RawDrawingController(
             available = { isAvailable },
             backendFactory = { l -> factoryCalls++; listener = l; backend },
             sink = sink,
             scheduler = scheduler,
             onFailure = { failure = it },
+            onPenUpFlush = {
+                flushes++
+                if (flushLikeCanvas) {
+                    c.hidePenLayer()
+                    c.schedulePenLayerResume()
+                }
+            },
         )
 
         /** Attached, laid out, focused, visible, crayon tool. */
@@ -103,6 +114,16 @@ class RawDrawingControllerTest {
             c.onRawBegin(x0, y0, 1f, 0L, false)
             c.onRawMove(x0 + 5, y0 + 5, 1f, 1L, false)
             c.onRawEnd(x0 + 5, y0 + 5, 0f, 2L, false)
+        }
+
+        /** A committed hardware stroke as the canvas drives it (raw first, then the router's pen stroke). */
+        fun canvasStroke(x0: Float = 10f, y0: Float = 10f) {
+            c.onRawBegin(x0, y0, 1f, 0L, false)
+            c.onPenStrokeStart()
+            c.onRawMove(x0 + 5, y0 + 5, 1f, 1L, false)
+            c.onRawEnd(x0 + 5, y0 + 5, 0f, 2L, false)
+            c.onPenStrokeEnd(cancelled = false)
+            c.schedulePenUpFlush()
         }
     }
 
@@ -456,5 +477,196 @@ class RawDrawingControllerTest {
         }
         assertEquals(0, r.c.consecutiveMisses)
         assertNull(r.failure)
+    }
+
+    // ---------------- pen-up refresh debounce (stroke latency jitter fix) ----------------
+
+    @Test
+    fun rapidStrokesKeepTheHardwarePenLayerLiveAndRefreshOnceAtTheEndOfTheBurst() {
+        val r = Rig().armed()
+        r.flushLikeCanvas = true
+        r.backend.log.clear()
+        // A child colouring back and forth: 6 strokes, pen lifted ~100 ms between them.
+        repeat(6) { i ->
+            r.canvasStroke(10f + i * 20, 10f)
+            assertTrue(r.c.isPenUpFlushPending)
+            assertEquals("one debounce timer", 1, r.scheduler.pending.size)
+            assertEquals(RawDrawingController.PEN_UP_FLUSH_DELAY_MS, r.scheduler.delays.last())
+        }
+        assertTrue(
+            "the firmware pen layer was never paused inside the burst, so every stroke was drawn instantly",
+            r.backend.log.isEmpty(),
+        )
+        assertTrue(r.c.isRenderEnabled)
+        assertEquals(0, r.flushes)
+
+        r.scheduler.runAll() // ~450 ms of pen idle
+        assertEquals("ONE refresh for the whole burst", 1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+        assertEquals(listOf("render=false"), r.backend.log)
+        r.scheduler.runAll() // resume after the refresh's frame
+        assertEquals(listOf("render=false", "render=true"), r.backend.log)
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun aStrokeStartingBeforeTheIdleTimeoutCancelsItWithoutTouchingTheFirmware() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.backend.log.clear()
+        r.c.onRawBegin(30f, 30f, 1f, 0L, false)
+        assertTrue("debounce timer cancelled by pen-down", r.scheduler.pending.isEmpty())
+        assertTrue("burst still pending while the next stroke draws", r.c.isPenUpFlushPending)
+        r.c.onPenStrokeStart()
+        assertTrue(r.backend.log.isEmpty())
+        r.c.onRawEnd(30f, 30f, 0f, 1L, false)
+        r.c.onPenStrokeEnd(cancelled = false)
+        r.c.schedulePenUpFlush()
+        assertEquals(1, r.scheduler.pending.size)
+        assertEquals(0, r.flushes)
+    }
+
+    @Test
+    fun motionEventOwnedPenStrokeAlsoCancelsTheIdleTimeout() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.c.onPenStrokeStart() // MotionEvent beat the raw callback
+        assertTrue(r.scheduler.pending.isEmpty())
+        assertEquals(0, r.flushes)
+    }
+
+    @Test
+    fun penUpFlushFiresAtOnceWhenNothingKeepsThePenLayerLive() {
+        val r = Rig().armed()
+        r.c.hidePenLayer() // e.g. layer hidden for an undo refresh
+        r.c.schedulePenUpFlush()
+        assertEquals(1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+
+        r.c.setToolAllowsRaw(false)
+        r.c.schedulePenUpFlush() // MotionEvent-owned stroke ending after raw was disabled
+        assertEquals(2, r.flushes)
+    }
+
+    @Test
+    fun toolColourOrBrushChangeFlushesThePendingBurst() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.c.setStroke(12f, 0xFFFF0000.toInt()) // unchanged (recomposition)
+        assertEquals(0, r.flushes)
+        assertTrue(r.c.isPenUpFlushPending)
+        r.c.setStroke(12f, 0xFF00FF00.toInt()) // colour picked from the palette
+        assertEquals(1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+        assertTrue("debounce timer cancelled", r.scheduler.pending.isEmpty())
+        r.c.setStroke(18f, 0xFF00FF00.toInt()) // no burst pending: nothing to flush
+        assertEquals(1, r.flushes)
+    }
+
+    @Test
+    fun disablingRawDrawingFlushesThePendingBurst() {
+        for (disable in listOf<(RawDrawingController) -> Unit>(
+            { it.setToolAllowsRaw(false) }, // paint bucket
+            { it.setSuspended(true) }, // reset confirmation / enlarged reference
+            { it.setHostResumed(false) }, // activity paused
+            { it.setWindowFocused(false) }, // dialog / notification shade
+        )) {
+            val r = Rig().armed()
+            r.canvasStroke()
+            disable(r.c)
+            assertFalse(r.c.isEnabled)
+            assertEquals(1, r.flushes)
+            assertFalse(r.c.isPenUpFlushPending)
+            assertTrue(r.scheduler.pending.isEmpty())
+        }
+    }
+
+    @Test
+    fun fingerGestureFlushesTheBurstAndHoldsThePenLayerHidden() {
+        val r = Rig().armed()
+        r.flushLikeCanvas = true
+        r.canvasStroke()
+        r.backend.log.clear()
+        r.c.setFingerGesture(true) // pan / zoom actually moved the picture
+        assertEquals(1, r.flushes)
+        assertEquals(listOf("render=false"), r.backend.log)
+        assertTrue("held hidden during the gesture", r.scheduler.pending.isEmpty())
+        r.c.setFingerGesture(false)
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun anUnrelatedRefreshFoldsTheBurstInAndCancelsTheTimer() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.c.hidePenLayer() // undo / fill refresh issued by the canvas covers the burst
+        assertFalse(r.c.isPenUpFlushPending)
+        assertTrue(r.scheduler.pending.isEmpty())
+        assertEquals("the caller refreshes, no second flush", 0, r.flushes)
+        r.canvasStroke()
+        r.c.cancelPenUpFlush() // the canvas flush took the burst
+        assertFalse(r.c.isPenUpFlushPending)
+        assertTrue(r.scheduler.pending.isEmpty())
+        assertEquals(0, r.flushes)
+    }
+
+    @Test
+    fun detachOrReleaseDropsTheBurstWithoutRefreshingADeadView() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.c.setAttached(false)
+        assertFalse(r.c.isPenUpFlushPending)
+        assertTrue(r.scheduler.pending.isEmpty())
+        assertEquals(0, r.flushes)
+        r.c.setAttached(true)
+        r.canvasStroke()
+        r.c.release()
+        assertEquals(0, r.flushes)
+        assertTrue(r.scheduler.pending.isEmpty())
+    }
+
+    @Test
+    fun failureStillRefreshesTheBurstsHardwareTrace() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        r.backend.enableOk = false
+        r.c.setToolAllowsRaw(false) // setRawDrawingEnabled(false) throws → raw drawing shut down
+        assertTrue(r.c.isFailed)
+        assertEquals(1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+    }
+
+    @Test
+    fun flushNowIsIdempotentAndAStaleTimerIsInert() {
+        val r = Rig().armed()
+        r.canvasStroke()
+        val timer = r.scheduler.pending.single()
+        r.c.flushPenUpNow()
+        r.c.flushPenUpNow()
+        assertEquals(1, r.flushes)
+        timer.run() // even if a runnable escaped cancellation
+        assertEquals(1, r.flushes)
+    }
+
+    @Test
+    fun resumeDelayIsConfigurableForTheFrameDrawnHandshake() {
+        val r = Rig().armed()
+        r.c.hidePenLayer()
+        r.c.schedulePenLayerResume(RawDrawingController.RENDER_RESUME_FALLBACK_MS) // at refresh time
+        r.c.schedulePenLayerResume() // refresh frame drawn: replaces the fallback
+        assertEquals(1, r.scheduler.pending.size)
+        assertEquals(
+            listOf(RawDrawingController.RENDER_RESUME_FALLBACK_MS, RawDrawingController.RENDER_RESUME_DELAY_MS),
+            r.scheduler.delays,
+        )
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
+    fun debounceIsLongerThanAKidsPenLiftButShorterThanOnyxsOwnPenUpRefresh() {
+        assertTrue(RawDrawingController.PEN_UP_FLUSH_DELAY_MS in 300L..500L)
+        assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS > RawDrawingController.RENDER_RESUME_DELAY_MS)
     }
 }

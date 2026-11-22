@@ -10,12 +10,14 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.SystemClock
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.eink.OnyxTouchHelperBackend
+import dev.xiaonuoboard.app.eink.PenBurst
 import dev.xiaonuoboard.app.eink.RawDrawingController
 import dev.xiaonuoboard.app.eink.RawDrawingGeometry
 import dev.xiaonuoboard.app.eink.RawStrokeSink
@@ -47,9 +49,14 @@ import dev.xiaonuoboard.app.engine.Tool
  *    re-uploaded to the GPU (instead of the whole 7.7 MB bitmap per brush sample / frame).
  *  - Refreshes are coalesced through [RefreshCoalescer] into ONE invalidate / EPD partial refresh per
  *    display frame, however many stylus samples arrived in that frame.
- *  - While the BOOX pen layer draws a stroke ([hwPreview]) no EPD refresh is issued at all; on pen-up
- *    the layer is hidden, the committed (region-clipped, colored) stroke plus the whole hardware trace
- *    area get ONE clean partial refresh, then the pen layer comes back.
+ *  - While the BOOX pen layer draws a stroke ([hwPreview]) no EPD refresh is issued at all. At pen-up
+ *    the stroke is committed to the paint layer right away, but its refresh is DEBOUNCED to the end of
+ *    the pen burst ([RawDrawingController.schedulePenUpFlush], [PenBurst]): the pen layer stays live
+ *    so the next stroke of a back-and-forth coloring burst is drawn by the firmware instantly, and
+ *    after ~450 ms of pen idle the layer is hidden, the committed (region-clipped, colored) strokes
+ *    plus the whole hardware trace area get ONE clean partial refresh, and the pen layer comes back
+ *    once that refresh's frame has been drawn. Anything else that refreshes (fill, undo, reset, tool /
+ *    colour change, finger gesture, overlay, pause) folds the pending burst into its refresh.
  */
 @SuppressLint("ViewConstructor")
 class ColoringCanvasView(
@@ -103,9 +110,14 @@ class ColoringCanvasView(
     private val flushRefresh = Runnable { flushPendingRefresh() }
 
     // Hardware pen trace bookkeeping (view px): the trace is NOT region-clipped and may extend past
-    // the painted rect (不涂出线) or the canvas image, so its own bounds are refreshed at pen-up too.
+    // the painted rect (不涂出线) or the canvas image, so its own bounds are refreshed with the burst.
     private val trace = TraceBounds()
-    private var pendingTraceRefresh: Rect? = null
+    /** Committed pen strokes + hardware traces awaiting the debounced end-of-burst refresh. */
+    private val penBurst = PenBurst()
+    /** A refresh was issued: resume the pen layer ≈2 frames after its frame is drawn. */
+    private var resumeAfterDraw = false
+    /** The current finger gesture changed what is shown (pan / zoom / finger paint) → pen layer held. */
+    private var fingerVisual = false
     private var lastRawStrokeEndUptime = Long.MIN_VALUE
 
     private var currentTool: Tool = controller.tool
@@ -127,7 +139,9 @@ class ColoringCanvasView(
 
             override fun onStrokeStart(kind: PointerKind, x: Float, y: Float, pressure: Float, time: Long) {
                 stroking = true
-                if (kind == PointerKind.STYLUS || kind == PointerKind.ERASER_TIP) startPenLayerStroke(x, y)
+                // Finger painting: its FAST frames must reach the panel → hold the pen layer hidden
+                // (before the first dab syncs). Pens get the hardware pen layer instead.
+                if (isPen(kind)) startPenLayerStroke(x, y) else beginFingerVisual()
             }
 
             override fun onStrokePoint(x: Float, y: Float, pressure: Float, time: Long) {
@@ -135,22 +149,17 @@ class ColoringCanvasView(
             }
 
             override fun onStrokeEnd(rect: DirtyRect, x: Float, y: Float, pressure: Float, time: Long, cancelled: Boolean) {
-                val wasHw = hwPreview
-                if (wasHw) {
-                    if (!cancelled) trace.add(x, y)
-                    endPenLayerStroke(cancelled)
-                }
                 stroking = false
-                // One clean (non-FAST) refresh of the whole stroke in color, after the pen layer is
-                // gone. Uses the union of everything synced during the stroke so a cancelled stroke's
-                // rollback (reported with an empty rect) is also repainted cleanly.
+                // Union of everything synced during the stroke, so a cancelled stroke's rollback
+                // (reported with an empty rect) is also repainted cleanly.
                 val all = strokeDirty.union(rect.clamp(cw, ch))
                 strokeDirty = DirtyRect.EMPTY
-                if (!all.isEmpty) requestRefresh(all, EinkMode.NORMAL)
-                // Even when nothing was painted the hardware trace must be repainted away (one post).
-                if (wasHw) {
-                    removeCallbacks(flushRefresh)
-                    postOnAnimation(flushRefresh)
+                if (hwPreview) {
+                    if (!cancelled) trace.add(x, y)
+                    endPenLayerStroke(all, cancelled)
+                } else if (!all.isEmpty) {
+                    // One clean (non-FAST) refresh of the whole stroke in color.
+                    requestRefresh(all, EinkMode.NORMAL)
                 }
                 if (!cancelled) {
                     strokesSinceFull++
@@ -202,6 +211,9 @@ class ColoringCanvasView(
             override fun cancel(task: Runnable) { removeCallbacks(task) }
         },
         onFailure = { reason -> OnyxEinkBridge.reportRawDrawingFailure(reason) },
+        // End of a pen burst (idle timeout, tool / colour change, raw off, finger gesture, failure):
+        // ONE frame-aligned refresh of everything the burst drew.
+        onPenUpFlush = { scheduleFlush() },
     )
 
     private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { syncRawBounds() }
@@ -249,18 +261,20 @@ class ColoringCanvasView(
         strokesSinceFull = 0
         onGhostHint?.invoke(false)
         if (!initDone) return
+        penBurst.clear() // the full flash covers the pending burst
         raw.hidePenLayer()
         OnyxEinkBridge.clearGhosting(this)
-        raw.schedulePenLayerResume()
+        resumePenLayerAfterDraw()
     }
 
     /** Full-view refresh with the BOOX pen layer hidden around it (no-op handshake elsewhere). */
     private fun refreshWholeView(mode: EinkMode) {
         if (!initDone) { invalidate(); return }
         if (hwPreview) { invalidate(); return } // mid-stroke: shown by the pen-up refresh
+        penBurst.clear() // the whole-view refresh covers the pending burst
         raw.hidePenLayer()
         OnyxEinkBridge.refresh(this, mode)
-        raw.schedulePenLayerResume()
+        resumePenLayerAfterDraw()
     }
 
     val isReleased: Boolean get() = paintLayer.isReleased
@@ -349,34 +363,68 @@ class ColoringCanvasView(
     private fun clearPendingRefresh() {
         removeCallbacks(flushRefresh)
         refreshes.clear()
-        pendingTraceRefresh = null
+        penBurst.clear()
+        resumeAfterDraw = false
+        fingerVisual = false
     }
 
     // ---------------- BOOX pen layer (TouchHelper) ----------------
 
     private fun startPenLayerStroke(x: Float, y: Float) {
         if (!raw.isEnabled) return
-        raw.onPenStrokeStart() // brings the pen layer back if it was hidden for the previous refresh
+        // Same burst: cancels the pending end-of-burst refresh, and brings the pen layer back if it
+        // was hidden for a refresh.
+        raw.onPenStrokeStart()
         if (!raw.isEnabled) return
         hwPreview = true
-        // A refresh still queued (e.g. the previous stroke's pen-up refresh when strokes follow each
-        // other within one vsync) must not hit the EPD while the pen layer owns the screen: fold it
-        // into this stroke's clean pen-up refresh instead (pendingTraceRefresh simply stays queued).
+        // A refresh still queued (e.g. the burst's refresh when the pen came down within the same
+        // vsync) must not hit the EPD while the pen layer owns the screen: fold it into this burst's
+        // clean refresh instead (the burst's own areas simply stay pending).
         removeCallbacks(flushRefresh)
         refreshes.drain()?.let { strokeDirty = strokeDirty.union(it.rect) }
         trace.reset()
         trace.add(x, y)
     }
 
-    private fun endPenLayerStroke(cancelled: Boolean) {
+    /** Hardware pen stroke ended: commit its areas to the burst and debounce the refresh. */
+    private fun endPenLayerStroke(all: DirtyRect, cancelled: Boolean) {
         hwPreview = false
         raw.onPenStrokeEnd(cancelled)
-        raw.hidePenLayer() // leave scribble now: no more hardware trace, our pen-up refresh follows
-        trace.refreshRect(rawStrokeWidthPx(currentTool, controller.brushSize), TRACE_PAD_PX)?.let { t ->
-            val r = Rect(t.left, t.top, t.right, t.bottom)
-            pendingTraceRefresh = pendingTraceRefresh?.apply { union(r) } ?: r
-        }
+        penBurst.addStroke(all)
+        trace.refreshRect(rawStrokeWidthPx(currentTool, controller.brushSize), TRACE_PAD_PX)?.let { penBurst.addTrace(it) }
         trace.reset()
+        if (cancelled) {
+            // Rolled back (aborted raw stroke, pen priority…): show the rollback right away.
+            raw.hidePenLayer()
+            scheduleFlush()
+        } else {
+            // Keep the pen layer live for the next stroke of the burst; refresh once it is over.
+            raw.schedulePenUpFlush()
+        }
+    }
+
+    /** One frame-aligned flush of everything pending (coalesced refreshes + the pen burst). */
+    private fun scheduleFlush() {
+        removeCallbacks(flushRefresh)
+        postOnAnimation(flushRefresh)
+    }
+
+    /** A refresh was issued: resume the pen layer ≈2 frames after its frame is drawn (fallback timer). */
+    private fun resumePenLayerAfterDraw() {
+        resumeAfterDraw = true
+        raw.schedulePenLayerResume(RawDrawingController.RENDER_RESUME_FALLBACK_MS)
+    }
+
+    /** The finger gesture changes what is shown: hold the pen layer hidden (flushes a pen burst). */
+    private fun beginFingerVisual() {
+        if (fingerVisual) return
+        fingerVisual = true
+        raw.setFingerGesture(true)
+    }
+
+    private fun endFingerVisual() {
+        fingerVisual = false
+        raw.setFingerGesture(false)
     }
 
     /** Hardware trace width in screen px: the brush (eraser ×1.5) diameter at the current zoom. */
@@ -413,29 +461,26 @@ class ColoringCanvasView(
 
     private fun flushPendingRefresh() {
         // Never issue an EPD refresh while the hardware pen layer owns the screen: startPenLayerStroke()
-        // already folded pending work into strokeDirty / pendingTraceRefresh, so nothing is lost.
+        // already folded pending work into strokeDirty, and the burst stays pending, so nothing is lost.
         if (hwPreview) return
-        val batch = refreshes.drain()
-        val traceRect = pendingTraceRefresh
-        pendingTraceRefresh = null
-        if (!paintLayer.isReleased && (batch != null || traceRect != null)) {
-            val rect = batch?.let { canvasToViewRect(it.rect) } ?: Rect(traceRect)
-            if (batch != null && traceRect != null) rect.union(traceRect)
-            val mode = when {
-                batch == null -> EinkMode.NORMAL
-                traceRect != null -> RefreshCoalescer.stronger(batch.mode, EinkMode.NORMAL)
-                else -> batch.mode
-            }
+        raw.cancelPenUpFlush() // this refresh takes the pending burst with it
+        val flush = penBurst.take(refreshes.drain())
+        if (flush != null && !paintLayer.isReleased) {
+            val rect = if (flush.canvasRect.isEmpty) Rect() else canvasToViewRect(flush.canvasRect)
+            if (!flush.viewRect.isEmpty) rect.union(flush.viewRect.left, flush.viewRect.top, flush.viewRect.right, flush.viewRect.bottom)
             if (rect.intersect(0, 0, width, height)) {
                 // FAST (DU) frames only happen during finger strokes, which already hold the pen layer
                 // hidden for the whole gesture (no per-frame firmware toggles).
-                if (mode != EinkMode.FAST) raw.hidePenLayer()
-                OnyxEinkBridge.refreshRect(this, rect, mode)
+                if (flush.mode != EinkMode.FAST) raw.hidePenLayer()
+                OnyxEinkBridge.refreshRect(this, rect, flush.mode)
+                resumePenLayerAfterDraw()
+                return
             }
         }
-        // Single resume point (also when there was nothing to refresh); no-op while a finger
-        // gesture holds the layer or when it is already showing.
-        raw.schedulePenLayerResume()
+        // Single resume point also when there was nothing to refresh; no-op while a finger gesture
+        // holds the layer or when it is already showing, and never ahead of a refresh still waiting
+        // for its frame to be drawn.
+        if (!resumeAfterDraw) raw.schedulePenLayerResume()
     }
 
     private fun canvasToViewRect(c: DirtyRect): Rect {
@@ -469,14 +514,20 @@ class ColoringCanvasView(
     }
 
     private fun applyTransform(scale: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) {
+        val oldZoom = zoom
+        val oldPanX = panX
+        val oldPanY = panY
         val newZoom = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
         val f = newZoom / zoom
         panX = focusX - (focusX - panX) * f + dx
         panY = focusY - (focusY - panY) * f + dy
         zoom = newZoom
         clampPan()
+        // A resting finger / pan at 1× (clamped) changes nothing: keep the pen layer and skip the frame.
+        if (zoom == oldZoom && panX == oldPanX && panY == oldPanY) return
+        beginFingerVisual()
         updateMatrix()
-        if (scale != 1f) onZoomChanged?.invoke(zoom)
+        if (zoom != oldZoom) onZoomChanged?.invoke(zoom)
         invalidate()
     }
 
@@ -499,6 +550,12 @@ class ColoringCanvasView(
         canvas.drawBitmap(lineOverlay, 0f, 0f, linePaint)
         canvas.drawRect(0f, 0f, cw.toFloat(), ch.toFloat(), borderPaint)
         canvas.restore()
+        if (resumeAfterDraw) {
+            // The refresh's frame is recorded now: resume scribble ≈2 frames later, after it has been
+            // rendered and posted to the EPD (replaces the fallback timer; one pending resume only).
+            resumeAfterDraw = false
+            raw.schedulePenLayerResume()
+        }
     }
 
     // ---------------- MotionEvents ----------------
@@ -508,7 +565,8 @@ class ColoringCanvasView(
         MotionEvent.TOOL_TYPE_ERASER -> PointerKind.ERASER_TIP
         MotionEvent.TOOL_TYPE_FINGER -> PointerKind.FINGER
         MotionEvent.TOOL_TYPE_MOUSE -> PointerKind.MOUSE
-        else -> PointerKind.UNKNOWN
+        // Some digitizer firmwares report the EMR pen without a tool type: never treat it as a finger.
+        else -> if (e.isFromSource(InputDevice.SOURCE_STYLUS)) PointerKind.STYLUS else PointerKind.UNKNOWN
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -517,9 +575,10 @@ class ColoringCanvasView(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex
                 val kind = kindOf(e, i)
-                // Finger pan / pinch / painting: keep the BOOX pen layer hidden until all fingers
-                // lift so these frames reach the panel (ignored while a raw pen stroke draws).
-                if (!isPen(kind) && !hwPreview) raw.setFingerGesture(true)
+                // A finger / palm going down does NOT hide the BOOX pen layer by itself: a palm resting
+                // before the pen lands used to leave the layer off at pen-down, so the stroke only
+                // appeared with its pen-up refresh. The layer is held hidden only once the finger
+                // gesture actually changes the picture (finger paint, pan / zoom: beginFingerVisual).
                 // A pen MotionEvent that went down before the last raw stroke ended is that same
                 // physical stroke, delivered late by the regular input pipeline: drop it (its later
                 // moves / up are ignored because the router never registered the pointer).
@@ -543,12 +602,12 @@ class ColoringCanvasView(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val i = e.actionIndex
                 router.up(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
-                if (e.actionMasked == MotionEvent.ACTION_UP) raw.setFingerGesture(false)
+                if (e.actionMasked == MotionEvent.ACTION_UP) endFingerVisual()
             }
             // Cancels the MotionEvent stream only; a raw pen stroke (separate source) carries on.
             MotionEvent.ACTION_CANCEL -> {
                 router.cancelAllExcept(RAW_POINTER_ID)
-                raw.setFingerGesture(false)
+                endFingerVisual()
             }
             else -> return super.onTouchEvent(e)
         }

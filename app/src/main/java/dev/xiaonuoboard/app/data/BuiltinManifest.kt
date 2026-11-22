@@ -60,15 +60,18 @@ object HomeTabs {
     const val AI = "ai"
     const val WORKS = "works"
 
-    data class Tab(val id: String, val title: String, val emoji: String)
+    /** Tab glyph, drawn by the UI as a custom E-Ink vector icon (`KidIcons.TabGlyph`) — no emoji. */
+    enum class Icon { SNOWFLAKE, DOG, PIG, BUN_FACE, LETTERS, MAGIC, GALLERY }
+
+    data class Tab(val id: String, val title: String, val icon: Icon)
 
     val ALL = listOf(
-        Tab("elsa", "艾莎", "❄️"),
-        Tab("bluey", "布鲁伊", "🐶"),
-        Tab("peppa", "小猪佩奇", "🐷"),
-        Tab("anpanman", "面包超人", "🍞"),
-        Tab("alphabet", "字母", "🔤"),
-        Tab(AI, "AI 魔法", "✨"),
-        Tab(WORKS, "我的作品", "🖼️"),
+        Tab("elsa", "艾莎", Icon.SNOWFLAKE),
+        Tab("bluey", "布鲁伊", Icon.DOG),
+        Tab("peppa", "小猪佩奇", Icon.PIG),
+        Tab("anpanman", "面包超人", Icon.BUN_FACE),
+        Tab("alphabet", "字母", Icon.LETTERS),
+        Tab(AI, "AI 魔法", Icon.MAGIC),
+        Tab(WORKS, "我的作品", Icon.GALLERY),
     )
 }

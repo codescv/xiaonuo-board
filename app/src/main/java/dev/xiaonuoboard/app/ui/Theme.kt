@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -148,6 +149,53 @@ fun EinkButton(
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = fg, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
+    }
+}
+
+/**
+ * High-contrast E-Ink button with custom vector icons around its label (the Home screen's
+ * replacement for emoji-prefixed labels): same 2dp ink border / ≥56dp / inverted-when-selected
+ * look as [EinkButton]; icons receive the current foreground tint.
+ */
+@Composable
+fun EinkIconTextButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    minHeight: Dp = Eink.Touch,
+    fontSize: Int = 17,
+    shape: Shape = Eink.Shape,
+    leading: (@Composable (tint: Color) -> Unit)? = null,
+    trailing: (@Composable (tint: Color) -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val bg = if (selected) Eink.Ink else Eink.White
+    val fg = if (!enabled) Eink.Muted else if (selected) Eink.White else Eink.Ink
+    Row(
+        modifier = modifier
+            .defaultMinSize(minWidth = Eink.Touch, minHeight = minHeight)
+            .background(bg, shape)
+            .border(Eink.Border, if (enabled) Eink.Ink else Eink.Muted, shape)
+            .einkClick(enabled, onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading?.invoke(fg)
+        if (text.isNotEmpty()) {
+            Text(
+                text,
+                color = fg,
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
+        trailing?.invoke(fg)
     }
 }
 
