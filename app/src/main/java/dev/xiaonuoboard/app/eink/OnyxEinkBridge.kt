@@ -78,6 +78,7 @@ object OnyxEinkBridge {
     @Volatile private var deviceInfo: String? = null
     @Volatile private var failure: String? = null
     @Volatile private var rawDrawingFailure: String? = null
+    @Volatile private var maxPressure: Float = 0f
 
     /**
      * One-time setup; call from `Activity.onCreate` before any canvas is created. No-op off BOOX.
@@ -96,14 +97,41 @@ object OnyxEinkBridge {
         } catch (t: Throwable) {
             failure = "${t.javaClass.simpleName}: ${t.message}"
             Log.w(TAG, "Onyx EPD init failed; using standard refresh", t)
+            DiagLog.log(DiagLog.ONYX, "init FAILED: $failure")
             return
         }
+        maxPressure = try { OnyxSdk.maxTouchPressure() } catch (_: Throwable) { 0f }
         touchHelperReady = try {
             Build.SUPPORTED_ABIS.orEmpty().contains("arm64-v8a") && OnyxSdk.hasStylus(app)
         } catch (t: Throwable) {
             Log.w(TAG, "Onyx stylus probe failed", t)
+            DiagLog.log(DiagLog.ONYX, "stylus probe failed: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
+        DiagLog.log(DiagLog.ONYX, "init ok: device=$deviceInfo touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure")
+    }
+
+    /**
+     * Raw `TouchPoint.pressure` scale reported by the BOOX framework (`EpdController.getMaxTouchPressure()`),
+     * or 0 when unknown (not BOOX / SDK failed). See [dev.xiaonuoboard.app.engine.RawPressureNormalizer].
+     */
+    val maxTouchPressure: Float get() = maxPressure
+
+    /** Human-readable reason why BOOX features are degraded, if any (diagnostics). */
+    val failureReason: String? get() = failure ?: rawDrawingFailure
+
+    /** Multi-line BOOX status block for the diagnostic log header. */
+    fun diagSummary(): String = buildString {
+        append("isBooxDevice=").append(isBooxDevice)
+        append(" isAvailable=").append(isAvailable)
+        append(" hasTouchHelper=").append(isTouchHelperAvailable)
+        append(" touchHelperReady=").append(touchHelperReady)
+        append(" support=").append(support.name).append('\n')
+        append("  sdk=").append(SDK_VERSIONS)
+        append(" device=").append(deviceInfo ?: "-")
+        append(" maxTouchPressure=").append(maxPressure).append('\n')
+        append("  initFailure=").append(failure ?: "-")
+        append(" rawDrawingFailure=").append(rawDrawingFailure ?: "-")
     }
 
     /** True when running on BOOX hardware with a working EPD controller (after [init]). */
@@ -143,6 +171,7 @@ object OnyxEinkBridge {
         if (rawDrawingFailure == null) {
             rawDrawingFailure = reason
             Log.w(TAG, "TouchHelper raw drawing disabled: $reason")
+            DiagLog.log(DiagLog.ONYX, "raw drawing disabled for later canvases: $reason")
         }
     }
 
@@ -153,6 +182,7 @@ object OnyxEinkBridge {
             true
         } catch (t: Throwable) {
             Log.w(TAG, "Onyx $name failed: ${t.message}")
+            DiagLog.log(DiagLog.ONYX, "$name failed: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
     }

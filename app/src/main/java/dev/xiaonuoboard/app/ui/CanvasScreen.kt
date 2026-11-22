@@ -54,6 +54,7 @@ import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.GalleryExporter
+import dev.xiaonuoboard.app.eink.DiagLog
 import dev.xiaonuoboard.app.engine.BrushSize
 import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.KaleidoPalette
@@ -165,10 +166,13 @@ fun CanvasScreen(
         if (view.isReleased) return null
         if (notifyNav && view.isStroking) {
             saveDeferred.set(true)
+            DiagLog.log(DiagLog.SAVE, "autosave deferred (mid-stroke)")
             return null
         }
         saveDeferred.set(false)
+        val snapT0 = System.nanoTime()
         val pixels = view.snapshotPixels()
+        val snapshotNanos = System.nanoTime() - snapT0
         val existing = currentArtworkId
         val id = existing ?: container.artworks.create(s.page).id.also {
             currentArtworkId = it
@@ -178,6 +182,7 @@ fun CanvasScreen(
         val mayCelebrate = notifyNav && !celebrated
         val resetsAtSnapshot = resetCount
         return ioJobs.track(container.appScope.launch {
+            val bgT0 = System.nanoTime()
             val progress = controller.progress(pixels)
             if (mayCelebrate && progress >= 0.9f) {
                 withContext(Dispatchers.Main) {
@@ -199,6 +204,13 @@ fun CanvasScreen(
                 thumb = Bitmap.createScaledBitmap(composite, 300, 400, true)
                 container.artworks.save(id, snapshot, thumb, progress)
                 ThumbCache.invalidate("file:${container.artworks.thumbFile(id).absolutePath}")
+                DiagLog.log(DiagLog.SAVE) {
+                    "autosave snapshot(UI)=${DiagLog.ms(snapshotNanos)}ms bgSave=${DiagLog.ms(System.nanoTime() - bgT0)}ms " +
+                        "progress=${"%.2f".format(java.util.Locale.US, progress)} final=${!notifyNav}"
+                }
+            } catch (e: Exception) {
+                DiagLog.log(DiagLog.SAVE, "autosave FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                throw e
             } finally {
                 // Large 1200×1600 buffers: free eagerly (3 GB device).
                 if (thumb !== composite) thumb?.recycle()

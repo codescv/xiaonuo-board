@@ -14,6 +14,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
+import dev.xiaonuoboard.app.eink.DiagLog
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.eink.OnyxTouchHelperBackend
@@ -22,6 +23,7 @@ import dev.xiaonuoboard.app.eink.RawDrawingController
 import dev.xiaonuoboard.app.eink.RawDrawingGeometry
 import dev.xiaonuoboard.app.eink.RawStrokeSink
 import dev.xiaonuoboard.app.eink.RefreshCoalescer
+import dev.xiaonuoboard.app.eink.StrokeStats
 import dev.xiaonuoboard.app.eink.TraceBounds
 import dev.xiaonuoboard.app.eink.UiScheduler
 import dev.xiaonuoboard.app.engine.BrushSize
@@ -29,6 +31,8 @@ import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.DirtyRect
 import dev.xiaonuoboard.app.engine.InputRouter
 import dev.xiaonuoboard.app.engine.PointerKind
+import dev.xiaonuoboard.app.engine.RawPressureNormalizer
+import dev.xiaonuoboard.app.engine.StrokePressure
 import dev.xiaonuoboard.app.engine.Tool
 
 /**
@@ -57,6 +61,14 @@ import dev.xiaonuoboard.app.engine.Tool
  *    plus the whole hardware trace area get ONE clean partial refresh, and the pen layer comes back
  *    once that refresh's frame has been drawn. Anything else that refreshes (fill, undo, reset, tool /
  *    colour change, finger gesture, overlay, pause) folds the pending burst into its refresh.
+ *
+ * Pressure: TouchHelper `TouchPoint.pressure` (raw digitizer units) is normalized with
+ * [RawPressureNormalizer]; MotionEvent pressure is already normalized by Android. The controller
+ * turns it into a smoothly tapering crayon width; on BOOX the firmware draws the live trace with its
+ * pressure-sensitive FOUNTAIN pen at the widest (firm-press) width.
+ *
+ * Diagnostics ([DiagLog]): one summary per stroke (source, points, pressure range, paint CPU, frame
+ * upload / draw time, whether the pen layer was live at pen-down), per refresh flush and per fill.
  */
 @SuppressLint("ViewConstructor")
 class ColoringCanvasView(
@@ -120,6 +132,21 @@ class ColoringCanvasView(
     private var fingerVisual = false
     private var lastRawStrokeEndUptime = Long.MIN_VALUE
 
+    /** Raw BOOX pen pressure → [0, 1] (self-corrects a wrong reported maximum). */
+    private val rawPressure = RawPressureNormalizer(OnyxEinkBridge.maxTouchPressure)
+    // Diagnostics: per-stroke accumulator + the input currently being fed into the router.
+    private val stats = StrokeStats()
+    private var feedingRaw = false
+    private var feedRawPressure = Float.NaN
+    private var feedEventTime = 0L
+    private var fillDone = false
+    private var feeding = false
+    private var endPending = false
+    private var endDirty = DirtyRect.EMPTY
+    private var endCancelled = false
+    /** Last refresh issued by [flushPendingRefresh], reported with the next logged frame. */
+    private var lastFlushInfo: String? = null
+
     private var currentTool: Tool = controller.tool
     private var excludeWindowRects: List<Rect> = emptyList()
     private val screenLoc = IntArray(2)
@@ -130,7 +157,7 @@ class ColoringCanvasView(
     /** True while a crayon / eraser stroke is in progress (callers defer heavy work until it ends). */
     val isStroking: Boolean get() = stroking
 
-    private val router = InputRouter(
+    private val router: InputRouter = InputRouter(
         controller = controller,
         listener = object : InputRouter.Listener {
             override fun onTransform(scale: Float, focusX: Float, focusY: Float, dx: Float, dy: Float) {
@@ -139,6 +166,15 @@ class ColoringCanvasView(
 
             override fun onStrokeStart(kind: PointerKind, x: Float, y: Float, pressure: Float, time: Long) {
                 stroking = true
+                if (endPending) logStrokeEnd() // the stroke this one pre-empted (pen priority)
+                if (DiagLog.enabled) {
+                    stats.begin(
+                        if (feedingRaw) StrokeStats.Source.RAW else StrokeStats.Source.MOTION, kind,
+                        renderEnabledAtBegin = if (feedingRaw) raw.lastBeginRenderWasEnabled else raw.isRenderEnabled,
+                        nowMs = SystemClock.uptimeMillis(), eventTimeMs = feedEventTime,
+                    )
+                    stats.point(pressure, feedRawPressure)
+                }
                 // Finger painting: its FAST frames must reach the panel → hold the pen layer hidden
                 // (before the first dab syncs). Pens get the hardware pen layer instead.
                 if (isPen(kind)) startPenLayerStroke(x, y) else beginFingerVisual()
@@ -146,6 +182,7 @@ class ColoringCanvasView(
 
             override fun onStrokePoint(x: Float, y: Float, pressure: Float, time: Long) {
                 if (hwPreview) trace.add(x, y)
+                stats.point(pressure, feedRawPressure)
             }
 
             override fun onStrokeEnd(rect: DirtyRect, x: Float, y: Float, pressure: Float, time: Long, cancelled: Boolean) {
@@ -154,6 +191,14 @@ class ColoringCanvasView(
                 // (reported with an empty rect) is also repainted cleanly.
                 val all = strokeDirty.union(rect.clamp(cw, ch))
                 strokeDirty = DirtyRect.EMPTY
+                if (stats.active) {
+                    endDirty = all
+                    endCancelled = cancelled
+                    endPending = true
+                    // Inside a feed the summary waits for the feed's CPU time (strokeEnd's undo
+                    // commit included); a cancel from outside any feed (release, detach) logs now.
+                    if (!feeding) logStrokeEnd()
+                }
                 if (hwPreview) {
                     if (!cancelled) trace.add(x, y)
                     endPenLayerStroke(all, cancelled)
@@ -170,6 +215,7 @@ class ColoringCanvasView(
             }
 
             override fun onFilled(rect: DirtyRect) {
+                fillDone = true
                 strokesSinceFull++
                 onGhostHint?.invoke(strokesSinceFull >= GHOST_HINT_EVERY)
                 onFilled?.invoke()
@@ -181,18 +227,27 @@ class ColoringCanvasView(
     )
 
     /** TouchHelper raw strokes → the router, as pointer [RAW_POINTER_ID] (view-local px). */
-    private val rawSink = object : RawStrokeSink {
+    private val rawSink: RawStrokeSink = object : RawStrokeSink {
         override fun rawStrokeBegin(x: Float, y: Float, pressure: Float, time: Long, erasing: Boolean) {
             val kind = if (erasing) PointerKind.ERASER_TIP else PointerKind.STYLUS
-            router.down(RAW_POINTER_ID, kind, x, y, 0f, pressure, SystemClock.uptimeMillis())
+            val t0 = System.nanoTime()
+            feedRaw(pressure, time)
+            router.down(RAW_POINTER_ID, kind, x, y, 0f, rawPressure.normalize(pressure), SystemClock.uptimeMillis())
+            endFeed(t0)
         }
 
         override fun rawStrokeMove(x: Float, y: Float, pressure: Float, time: Long) {
-            router.move(RAW_POINTER_ID, x, y, pressure, SystemClock.uptimeMillis())
+            val t0 = System.nanoTime()
+            feedRaw(pressure, time)
+            router.move(RAW_POINTER_ID, x, y, rawPressure.normalize(pressure), SystemClock.uptimeMillis())
+            endFeed(t0)
         }
 
         override fun rawStrokeEnd(x: Float, y: Float, pressure: Float, time: Long) {
-            router.up(RAW_POINTER_ID, x, y, pressure, SystemClock.uptimeMillis())
+            val t0 = System.nanoTime()
+            feedRaw(Float.NaN, time) // the lift sample's pressure is not a drawing sample
+            router.up(RAW_POINTER_ID, x, y, rawPressure.normalize(pressure), SystemClock.uptimeMillis())
+            endFeed(t0)
             lastRawStrokeEndUptime = SystemClock.uptimeMillis()
         }
 
@@ -202,7 +257,7 @@ class ColoringCanvasView(
         }
     }
 
-    private val raw = RawDrawingController(
+    private val raw: RawDrawingController = RawDrawingController(
         available = { OnyxEinkBridge.isTouchHelperAvailable },
         backendFactory = { listener -> OnyxTouchHelperBackend(this, listener) },
         sink = rawSink,
@@ -235,7 +290,7 @@ class ColoringCanvasView(
      */
     fun syncToolState(tool: Tool, brush: BrushSize, color: Int, suspendRaw: Boolean) {
         currentTool = tool
-        raw.setStroke(rawStrokeWidthPx(tool, brush), if (tool == Tool.ERASER) Color.WHITE else color or (0xFF shl 24))
+        raw.setStroke(rawStrokeWidthPx(tool, brush), if (tool == Tool.ERASER) Color.WHITE else color or (0xFF shl 24), tool == Tool.CRAYON)
         raw.setSuspended(suspendRaw)
         raw.setToolAllowsRaw(tool == Tool.CRAYON || tool == Tool.ERASER)
     }
@@ -263,6 +318,7 @@ class ColoringCanvasView(
         if (!initDone) return
         penBurst.clear() // the full flash covers the pending burst
         raw.hidePenLayer()
+        DiagLog.log(DiagLog.DRAW, "clearGhosting (GC)")
         OnyxEinkBridge.clearGhosting(this)
         resumePenLayerAfterDraw()
     }
@@ -300,6 +356,7 @@ class ColoringCanvasView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        DiagLog.log(DiagLog.CANVAS) { "attached canvas=${cw}x$ch hwAccel=$isHardwareAccelerated touchHelper=${OnyxEinkBridge.isTouchHelperAvailable}" }
         viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
         raw.setWindowFocused(hasWindowFocus())
         raw.setVisible(isEffectivelyVisible())
@@ -308,6 +365,7 @@ class ColoringCanvasView(
     }
 
     override fun onDetachedFromWindow() {
+        DiagLog.log(DiagLog.CANVAS, "detached")
         viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
         // Close TouchHelper first (aborts a raw stroke), then any MotionEvent stroke: never stay stuck
         // in stroking / pen-layer mode (that would also defer auto-saves forever). Tiles are kept so
@@ -366,6 +424,44 @@ class ColoringCanvasView(
         penBurst.clear()
         resumeAfterDraw = false
         fingerVisual = false
+    }
+
+    // ---------------- diagnostics ----------------
+
+    private fun feedRaw(rawPressureValue: Float, eventTime: Long) {
+        feeding = true
+        feedingRaw = true
+        feedRawPressure = rawPressureValue
+        feedEventTime = eventTime
+    }
+
+    private fun feedMotion(rawPressureValue: Float, eventTime: Long) {
+        feeding = true
+        feedingRaw = false
+        feedRawPressure = rawPressureValue
+        feedEventTime = eventTime
+    }
+
+    /** Ends one router call: charges its CPU time to the stroke and emits a pending summary. */
+    private fun endFeed(startNanos: Long) {
+        val spent = System.nanoTime() - startNanos
+        if (stats.active) stats.addCpu(spent)
+        feeding = false
+        if (endPending) logStrokeEnd()
+        if (fillDone) {
+            fillDone = false
+            DiagLog.log(DiagLog.FILL) {
+                "fill+undo ${DiagLog.ms(spent)}ms undoTiles=${controller.undoStack.lastStepTileCount} undoSteps=${controller.undoStack.size}"
+            }
+        }
+    }
+
+    private fun logStrokeEnd() {
+        endPending = false
+        stats.end(SystemClock.uptimeMillis(), endDirty, endCancelled, controller.currentBrushRadius)?.let {
+            DiagLog.log(DiagLog.STROKE, if (rawPressure.observedMax > 0f) "$it rawScale=${rawPressure.scaleMax}" else it)
+        }
+        endDirty = DirtyRect.EMPTY
     }
 
     // ---------------- BOOX pen layer (TouchHelper) ----------------
@@ -427,14 +523,18 @@ class ColoringCanvasView(
         raw.setFingerGesture(false)
     }
 
-    /** Hardware trace width in screen px: the brush (eraser ×1.5) diameter at the current zoom. */
+    /**
+     * Hardware trace width in screen px: the brush (eraser ×1.5) diameter at the current zoom; for the
+     * pressure-sensitive crayon trace the firm-press (maximum) diameter.
+     */
     private fun rawStrokeWidthPx(tool: Tool, brush: BrushSize): Float =
-        RawDrawingGeometry.traceWidthPx(brush.radius, tool == Tool.ERASER, viewScale)
+        RawDrawingGeometry.traceWidthPx(brush.radius, tool == Tool.ERASER, viewScale, pressureSensitive = tool == Tool.CRAYON)
 
     private fun syncRawStrokeWidth() {
         raw.setStroke(
             rawStrokeWidthPx(currentTool, controller.brushSize),
             if (currentTool == Tool.ERASER) Color.WHITE else controller.color or (0xFF shl 24),
+            currentTool == Tool.CRAYON,
         )
     }
 
@@ -472,7 +572,12 @@ class ColoringCanvasView(
                 // FAST (DU) frames only happen during finger strokes, which already hold the pen layer
                 // hidden for the whole gesture (no per-frame firmware toggles).
                 if (flush.mode != EinkMode.FAST) raw.hidePenLayer()
+                val t0 = System.nanoTime()
                 OnyxEinkBridge.refreshRect(this, rect, flush.mode)
+                if (DiagLog.enabled) {
+                    lastFlushInfo = "refresh=${flush.mode.name} epdCall=${DiagLog.ms(System.nanoTime() - t0)}ms rect=${rect.toShortString()}" +
+                        if (flush.viewRect.isEmpty) "" else " +trace"
+                }
                 resumePenLayerAfterDraw()
                 return
             }
@@ -501,6 +606,8 @@ class ColoringCanvasView(
         baseMatrix.postTranslate(dx, dy)
         updateMatrix()
         syncRawBounds()
+        DiagLog.setState("canvas", "bitmap=${cw}x$ch view=${w}x$h fitScale=${"%.3f".format(java.util.Locale.US, scale)}")
+        DiagLog.log(DiagLog.CANVAS) { "size view=${w}x$h canvas=${cw}x$ch scale=$scale" }
     }
 
     private fun updateMatrix() {
@@ -546,15 +653,36 @@ class ColoringCanvasView(
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         canvas.concat(viewMatrix)
         if (ghostVisible) refBitmap?.takeIf { !it.isRecycled }?.let { canvas.drawBitmap(it, null, canvasRect, ghostPaint) }
+        val t0 = System.nanoTime()
+        val tilesCopied = paintLayer.flush()
+        val t1 = System.nanoTime()
         paintLayer.draw(canvas, bitmapPaint)
         canvas.drawBitmap(lineOverlay, 0f, 0f, linePaint)
         canvas.drawRect(0f, 0f, cw.toFloat(), ch.toFloat(), borderPaint)
         canvas.restore()
+        if (tilesCopied > 0) logFrame(tilesCopied, t1 - t0, System.nanoTime() - t1)
         if (resumeAfterDraw) {
             // The refresh's frame is recorded now: resume scribble ≈2 frames later, after it has been
             // rendered and posted to the EPD (replaces the fallback timer; one pending resume only).
             resumeAfterDraw = false
             raw.schedulePenLayerResume()
+        }
+    }
+
+    /**
+     * Frame diagnostics. During a stroke frames are folded into the stroke summary (no per-frame
+     * lines); otherwise one line per frame that uploaded paint tiles, with the refresh that caused it.
+     */
+    private fun logFrame(tiles: Int, uploadNanos: Long, drawNanos: Long) {
+        if (!DiagLog.enabled) return
+        if (stats.active) {
+            stats.frame(tiles, uploadNanos, drawNanos)
+            return
+        }
+        val flush = lastFlushInfo
+        lastFlushInfo = null
+        DiagLog.log(DiagLog.DRAW) {
+            "frame dirtyTiles=$tiles upload=${DiagLog.ms(uploadNanos)}ms draw=${DiagLog.ms(drawNanos)}ms ${flush ?: "refresh=-"}"
         }
     }
 
@@ -583,30 +711,46 @@ class ColoringCanvasView(
                 // physical stroke, delivered late by the regular input pipeline: drop it (its later
                 // moves / up are ignored because the router never registered the pointer).
                 if (isPen(kind) && raw.isOpen && e.eventTime <= lastRawStrokeEndUptime) return true
-                router.down(e.getPointerId(i), kind, e.getX(i), e.getY(i), e.getTouchMajor(i), e.getPressure(i), e.eventTime)
+                val t0 = System.nanoTime()
+                feedMotion(e.getPressure(i), e.eventTime)
+                router.down(e.getPointerId(i), kind, e.getX(i), e.getY(i), e.getTouchMajor(i), StrokePressure.normalize(e.getPressure(i), 1f), e.eventTime)
+                endFeed(t0)
                 // Deliver the rest of a stroke's samples immediately instead of batching them to vsync:
                 // up to one frame less input latency for the brush. Rendering stays one upload + one
                 // refresh per frame thanks to the coalescing above.
                 if (router.mode == InputRouter.Mode.STROKE && router.activeId == e.getPointerId(i)) requestUnbufferedDispatch(e)
             }
             MotionEvent.ACTION_MOVE -> {
+                val t0 = System.nanoTime()
                 for (h in 0 until e.historySize) {
                     for (i in 0 until e.pointerCount) {
-                        router.move(e.getPointerId(i), e.getHistoricalX(i, h), e.getHistoricalY(i, h), e.getHistoricalPressure(i, h), e.getHistoricalEventTime(h))
+                        val p = e.getHistoricalPressure(i, h)
+                        feedMotion(p, e.eventTime)
+                        router.move(e.getPointerId(i), e.getHistoricalX(i, h), e.getHistoricalY(i, h), StrokePressure.normalize(p, 1f), e.getHistoricalEventTime(h))
                     }
                 }
                 for (i in 0 until e.pointerCount) {
-                    router.move(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
+                    val p = e.getPressure(i)
+                    feedMotion(p, e.eventTime)
+                    router.move(e.getPointerId(i), e.getX(i), e.getY(i), StrokePressure.normalize(p, 1f), e.eventTime)
                 }
+                feedMotion(Float.NaN, e.eventTime)
+                endFeed(t0)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val i = e.actionIndex
-                router.up(e.getPointerId(i), e.getX(i), e.getY(i), e.getPressure(i), e.eventTime)
+                val t0 = System.nanoTime()
+                feedMotion(Float.NaN, e.eventTime)
+                router.up(e.getPointerId(i), e.getX(i), e.getY(i), StrokePressure.normalize(e.getPressure(i), 1f), e.eventTime)
+                endFeed(t0)
                 if (e.actionMasked == MotionEvent.ACTION_UP) endFingerVisual()
             }
             // Cancels the MotionEvent stream only; a raw pen stroke (separate source) carries on.
             MotionEvent.ACTION_CANCEL -> {
+                val t0 = System.nanoTime()
+                feedMotion(Float.NaN, e.eventTime)
                 router.cancelAllExcept(RAW_POINTER_ID)
+                endFeed(t0)
                 endFingerVisual()
             }
             else -> return super.onTouchEvent(e)

@@ -15,6 +15,9 @@ import kotlin.math.hypot
  *    ignored until everything is lifted.
  *  - Very large finger contacts (touchMajor > [palmTouchMajor]) are treated as palms and ignored.
  *  - Two non-palm fingers (and no pen) → pinch zoom / pan via [Listener.onTransform].
+ *
+ * Pressure arguments are NORMALIZED `[0, 1]` ([StrokePressure.normalize]; NaN / ≤ 0 = no reading) and
+ * are forwarded to the controller, which decides whether the pointer kind / tool uses them.
  */
 class InputRouter(
     private val controller: ColoringCanvasController,
@@ -61,7 +64,7 @@ class InputRouter(
         return buf
     }
 
-    fun down(id: Int, kind: PointerKind, x: Float, y: Float, touchMajor: Float = 0f, pressure: Float = 1f, time: Long = 0L) {
+    fun down(id: Int, kind: PointerKind, x: Float, y: Float, touchMajor: Float = 0f, pressure: Float = StrokePressure.NO_PRESSURE, time: Long = 0L) {
         val pen = isPen(kind)
         val palm = !pen && kind == PointerKind.FINGER && touchMajor > palmTouchMajor
         pointers[id] = P(kind, x, y, palm)
@@ -103,7 +106,7 @@ class InputRouter(
             val c = canvas(x, y)
             // Notify first so the view can enter its fast/scribble preview before the first dab syncs.
             listener.onStrokeStart(kind, x, y, pressure, time)
-            if (controller.strokeBegin(c[0], c[1], kind)) {
+            if (controller.strokeBegin(c[0], c[1], kind, pressure)) {
                 mode = Mode.STROKE
                 return
             }
@@ -114,7 +117,7 @@ class InputRouter(
     }
 
     /** Pointer moved (call once per historical sample, then for the current sample). */
-    fun move(id: Int, x: Float, y: Float, pressure: Float = 1f, time: Long = 0L) {
+    fun move(id: Int, x: Float, y: Float, pressure: Float = StrokePressure.NO_PRESSURE, time: Long = 0L) {
         val p = pointers[id] ?: return
         val px = p.x
         val py = p.y
@@ -122,7 +125,7 @@ class InputRouter(
         when (mode) {
             Mode.STROKE -> if (id == activeId) {
                 val c = canvas(x, y)
-                controller.strokeMove(c[0], c[1])
+                controller.strokeMove(c[0], c[1], pressure)
                 listener.onStrokePoint(x, y, pressure, time)
             }
             Mode.TAP -> if (id == activeId && hypot(x - downX, y - downY) > tapSlop) {

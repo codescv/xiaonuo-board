@@ -30,6 +30,11 @@ import dev.xiaonuoboard.app.engine.DirtyRect
  *    resets the stroke style, so we force a known disabled state and set the style afterwards.
  *  - Pen-up auto refresh is on by default (500 ms); it is turned off because the canvas issues its
  *    own refresh with the real (region-clipped, colored) stroke.
+ *  - `TouchPoint.pressure` is the RAW digitizer value (`RawInputReader.pressReceived` builds it with
+ *    `(float) pressureInt`), scaled by `EpdController.getMaxTouchPressure()`; it is forwarded raw and
+ *    normalized by the canvas.
+ *  - `setStrokeStyle` / `setStrokeColor` are firmware-global (`EpdController` statics); the style is
+ *    reset to PENCIL by `openRawDrawing()` / `closeRawDrawing()` only.
  */
 class OnyxTouchHelperBackend(
     private val view: View,
@@ -47,35 +52,52 @@ class OnyxTouchHelperBackend(
             true
         } catch (t: Throwable) {
             Log.w(TAG, "TouchHelper.$name failed", t)
+            DiagLog.log(DiagLog.TOUCH, "$name FAILED: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
     }
 
-    override fun open(limit: DirtyRect, exclude: List<DirtyRect>, strokeWidth: Float, strokeColor: Int): Boolean {
+    override fun open(
+        limit: DirtyRect,
+        exclude: List<DirtyRect>,
+        strokeWidth: Float,
+        strokeColor: Int,
+        pressureSensitive: Boolean,
+    ): Boolean {
         close()
+        val t0 = System.nanoTime()
         return try {
             val h = TouchHelper.create(view, Callback(++session))
             helper = h
             h.setStrokeWidth(strokeWidth)
             h.setLimitRect(limit.toRect(), excludes(exclude))
             h.openRawDrawing()
-            h.setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
+            // openRawDrawing() resets the (firmware-global) style to PENCIL: set ours afterwards.
+            h.setStrokeStyle(strokeStyle(pressureSensitive))
             h.setStrokeColor(strokeColor)
             // Deprecated in 1.5.9 but still honoured (RawInputReader.onPenUpRefresh checks the flag);
             // it only schedules a no-op onPenUpRefresh callback, the canvas refreshes itself.
             @Suppress("DEPRECATION")
             h.setPenUpRefreshEnabled(false)
             h.forceSetRawDrawingEnabled(false)
+            DiagLog.log(DiagLog.TOUCH) {
+                "open ok session=$session limit=$limit excludes=${exclude.size} width=$strokeWidth " +
+                    "color=#${Integer.toHexString(strokeColor)} style=${styleName(pressureSensitive)} in ${DiagLog.ms(System.nanoTime() - t0)}ms"
+            }
             true
         } catch (t: Throwable) {
             Log.w(TAG, "TouchHelper open failed", t)
+            DiagLog.log(DiagLog.TOUCH, "open FAILED: ${t.javaClass.simpleName}: ${t.message}")
             close()
             false
         }
     }
 
     override fun setLimit(limit: DirtyRect, exclude: List<DirtyRect>): Boolean =
-        call("setLimitRect") { it.setLimitRect(limit.toRect(), excludes(exclude)) }
+        call("setLimitRect") {
+            it.setLimitRect(limit.toRect(), excludes(exclude))
+            DiagLog.log(DiagLog.TOUCH) { "setLimit $limit excludes=$exclude" }
+        }
 
     private fun excludes(exclude: List<DirtyRect>) = RawDrawingGeometry.touchHelperExcludes(exclude).map { it.toRect() }
 
@@ -84,16 +106,33 @@ class OnyxTouchHelperBackend(
     override fun setRenderEnabled(enabled: Boolean): Boolean =
         call("setRawDrawingRenderEnabled") { it.setRawDrawingRenderEnabled(enabled) }
 
-    override fun setStroke(width: Float, color: Int): Boolean = call("setStroke") {
+    override fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean = call("setStroke") {
         it.setStrokeWidth(width)
+        it.setStrokeStyle(strokeStyle(pressureSensitive))
         it.setStrokeColor(color)
+        DiagLog.log(DiagLog.TOUCH) { "setStroke width=$width color=#${Integer.toHexString(color)} style=${styleName(pressureSensitive)}" }
     }
 
     override fun close() {
-        call("closeRawDrawing") { it.closeRawDrawing() }
+        if (helper != null) {
+            call("closeRawDrawing") { it.closeRawDrawing() }
+            DiagLog.log(DiagLog.TOUCH, "close session=$session")
+        }
         helper = null
         session++
     }
+
+    /**
+     * FOUNTAIN is the firmware's pressure-sensitive pen (BOOX Notes' pressure pens): the trace gets
+     * thicker / thinner with pen pressure, matching the app's pressure-modulated crayon. PENCIL is
+     * the constant-width style (eraser: predictable white trace). Both are drawn by the EPD
+     * firmware via `EpdController.setStrokeStyle` (onyxsdk-pen 1.5.9 → `BaseDevice.setStrokeStyle`
+     * reflection), so neither costs app-side latency.
+     */
+    private fun strokeStyle(pressureSensitive: Boolean): Int =
+        if (pressureSensitive) TouchHelper.STROKE_STYLE_FOUNTAIN else TouchHelper.STROKE_STYLE_PENCIL
+
+    private fun styleName(pressureSensitive: Boolean) = if (pressureSensitive) "FOUNTAIN" else "PENCIL"
 
     /** One callback per TouchHelper session; primitives are copied at once (points may be reused). */
     private inner class Callback(private val owner: Int) : RawInputCallback() {

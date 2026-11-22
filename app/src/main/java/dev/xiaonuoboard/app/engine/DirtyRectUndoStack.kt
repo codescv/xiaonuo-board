@@ -57,6 +57,9 @@ class DirtyRectUndoStack(
     /** Number of tiles snapshotted so far in the open action (diagnostics / tests). */
     val pendingTileCount: Int get() = touched.size
 
+    /** Tiles held by the most recent undo step, 0 when empty (diagnostics). */
+    val lastStepTileCount: Int get() = entries.lastOrNull()?.tiles?.size ?: 0
+
     fun beginAction() {
         resetPending()
         actionOpen = true

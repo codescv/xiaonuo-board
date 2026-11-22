@@ -16,14 +16,18 @@ interface RawPenListener {
  * machine below is JVM-testable. All rects are view-local px. Every call returns false on failure.
  */
 interface RawDrawingBackend {
-    /** Creates + opens raw drawing for the host view, leaving input AND render disabled. */
-    fun open(limit: DirtyRect, exclude: List<DirtyRect>, strokeWidth: Float, strokeColor: Int): Boolean
+    /**
+     * Creates + opens raw drawing for the host view, leaving input AND render disabled.
+     * [pressureSensitive] selects the firmware's pressure-sensitive pen style (crayon) instead of
+     * the constant-width one (eraser).
+     */
+    fun open(limit: DirtyRect, exclude: List<DirtyRect>, strokeWidth: Float, strokeColor: Int, pressureSensitive: Boolean): Boolean
     fun setLimit(limit: DirtyRect, exclude: List<DirtyRect>): Boolean
     /** Raw input reader + hardware pen render together (`TouchHelper.setRawDrawingEnabled`). */
     fun setEnabled(enabled: Boolean): Boolean
     /** Hardware pen render only (`TouchHelper.setRawDrawingRenderEnabled`); input keeps flowing. */
     fun setRenderEnabled(enabled: Boolean): Boolean
-    fun setStroke(width: Float, color: Int): Boolean
+    fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean
     fun close()
 }
 
@@ -113,6 +117,7 @@ class RawDrawingController(
     private var offsetY = 0
     private var strokeWidth = 1f
     private var strokeColor = 0xFF000000.toInt()
+    private var strokePressureSensitive = false
 
     // ---- state ----
     private var backend: RawDrawingBackend? = null
@@ -144,6 +149,12 @@ class RawDrawingController(
         private set
     /** A finger gesture is in progress: keep the pen layer hidden until it ends. */
     var isFingerGestureActive = false
+        private set
+    /**
+     * Whether the hardware pen layer was already drawing when the last raw stroke began (diagnostics:
+     * false means the firmware missed the start of that stroke until the layer was resumed).
+     */
+    var lastBeginRenderWasEnabled = false
         private set
 
     /**
@@ -189,16 +200,22 @@ class RawDrawingController(
         update()
     }
 
-    fun setStroke(width: Float, color: Int) {
-        if (width == strokeWidth && color == strokeColor) return
+    /**
+     * Hardware trace style. [pressureSensitive] selects the firmware's pressure pen (crayon) instead
+     * of the constant-width pen (eraser).
+     */
+    fun setStroke(width: Float, color: Int, pressureSensitive: Boolean = false) {
+        if (width == strokeWidth && color == strokeColor && pressureSensitive == strokePressureSensitive) return
         // Tool / colour / brush changed: show the burst drawn with the previous style now.
         flushPenUpNow()
         strokeWidth = width
         strokeColor = color
-        if (isOpen && backend?.setStroke(width, color) == false) fail("setStrokeWidth/Color failed")
+        strokePressureSensitive = pressureSensitive
+        if (isOpen && backend?.setStroke(width, color, pressureSensitive) == false) fail("setStrokeWidth/Color/Style failed")
     }
 
     fun release() {
+        DiagLog.log(DiagLog.RAW, "release")
         released = true
         update()
         backend = null
@@ -219,19 +236,31 @@ class RawDrawingController(
 
     private fun openBackend(): Boolean {
         val b = backend ?: backendFactory(this).also { backend = it }
-        if (!b.open(limit, exclude, strokeWidth, strokeColor)) {
+        if (!b.open(limit, exclude, strokeWidth, strokeColor, strokePressureSensitive)) {
             fail("TouchHelper open failed")
             return false
         }
+        DiagLog.log(DiagLog.RAW) { "open limit=$limit excludes=${exclude.size} anchor=($offsetX,$offsetY)" }
         isOpen = true
         isEnabled = false
         isRenderEnabled = false
         anchorX = offsetX
         anchorY = offsetY
+        publishState()
         return true
     }
 
+    /** Last-known raw drawing state for the diagnostic export header. */
+    private fun publishState() {
+        DiagLog.setState(
+            "rawDrawing",
+            "open=$isOpen enabled=$isEnabled failed=$isFailed${failureReason?.let { " ($it)" } ?: ""} " +
+                "rawEverDelivered=$rawEverDelivered width=$strokeWidth pressureStyle=$strokePressureSensitive",
+        )
+    }
+
     private fun closeBackend() {
+        DiagLog.log(DiagLog.RAW) { "close (attached=$attached released=$released failed=$isFailed)" }
         abortRawStroke()
         scheduler.cancel(resumeRender)
         cancelPenUpFlush() // detach / release: the view drops its pending refresh work itself
@@ -242,6 +271,7 @@ class RawDrawingController(
         penStrokeOpen = false
         isFingerGestureActive = false
         backend?.close()
+        publishState()
     }
 
     private fun applyEnabled(on: Boolean) {
@@ -251,8 +281,12 @@ class RawDrawingController(
             fail("setRawDrawingEnabled($on) failed")
             return
         }
+        DiagLog.log(DiagLog.RAW) {
+            if (on) "enable" else "disable (focus=$windowFocused visible=$visible resumed=$hostResumed suspended=$suspended toolRaw=$toolAllowsRaw)"
+        }
         isEnabled = on
         isRenderEnabled = on
+        publishState()
         if (on) {
             // The reader re-reads the view location on resume.
             anchorX = offsetX
@@ -272,6 +306,7 @@ class RawDrawingController(
             fail("re-anchor failed")
             return
         }
+        DiagLog.log(DiagLog.RAW) { "reanchor ($anchorX,$anchorY)->($offsetX,$offsetY)" }
         isRenderEnabled = true
         scheduler.cancel(resumeRender)
         anchorX = offsetX
@@ -280,6 +315,7 @@ class RawDrawingController(
 
     private fun fail(reason: String) {
         if (isFailed) return
+        DiagLog.log(DiagLog.RAW, "FAIL: $reason → standard pen path")
         isFailed = true
         failureReason = reason
         val burst = isPenUpFlushPending
@@ -298,6 +334,7 @@ class RawDrawingController(
         scheduler.cancel(resumeRender)
         if (!isOpen || !isEnabled || isRenderEnabled) return
         if (backend?.setRenderEnabled(true) == true) isRenderEnabled = true else fail("setRawDrawingRenderEnabled(true) failed")
+        if (isRenderEnabled) DiagLog.log(DiagLog.RAW, "resumeRender")
     }
 
     // ---------------- raw pen events ----------------
@@ -307,6 +344,7 @@ class RawDrawingController(
         if (isRawStrokeActive) abortRawStroke() // previous stroke never ended
         isFingerGestureActive = false // pen priority: the router aborts any finger gesture
         scheduler.cancel(penUpFlush) // same burst: keep the pen layer, refresh at the burst's end
+        lastBeginRenderWasEnabled = isRenderEnabled
         resumeRenderNow()
         if (!isEnabled) return // resuming the pen layer failed → raw drawing shut down
         rawEverDelivered = true
@@ -356,7 +394,10 @@ class RawDrawingController(
         if (rawSeenInPenStroke || rawEverDelivered) {
             consecutiveMisses = 0
         } else if (++consecutiveMisses >= MAX_MISSES) {
+            DiagLog.log(DiagLog.RAW, "$MAX_MISSES-miss fallback: pen strokes arrive only as MotionEvents")
             fail("TouchHelper 连续 $MAX_MISSES 笔未回传笔迹")
+        } else {
+            DiagLog.log(DiagLog.RAW) { "miss $consecutiveMisses/$MAX_MISSES (MotionEvent-only pen stroke)" }
         }
     }
 
@@ -369,6 +410,7 @@ class RawDrawingController(
         scheduler.cancel(penUpFlush)
         isPenUpFlushPending = true
         if (!isOpen || !isEnabled || !isRenderEnabled || isFingerGestureActive) {
+            DiagLog.log(DiagLog.RAW, "schedulePenUpFlush → immediate (layer not live)")
             flushPenUpNow()
             return
         }
@@ -380,6 +422,7 @@ class RawDrawingController(
         scheduler.cancel(penUpFlush)
         if (!isPenUpFlushPending) return
         isPenUpFlushPending = false
+        DiagLog.log(DiagLog.RAW, "flushPenUp")
         onPenUpFlush()
     }
 
@@ -395,6 +438,7 @@ class RawDrawingController(
         cancelPenUpFlush()
         if (!isOpen || !isEnabled || !isRenderEnabled) return
         if (backend?.setRenderEnabled(false) == true) isRenderEnabled = false else fail("setRawDrawingRenderEnabled(false) failed")
+        if (!isRenderEnabled) DiagLog.log(DiagLog.RAW, "hidePenLayer")
     }
 
     /**
@@ -415,11 +459,13 @@ class RawDrawingController(
         if (active == isFingerGestureActive) return
         if (active) {
             if (isRawStrokeActive) return
+            DiagLog.log(DiagLog.RAW, "fingerGesture on")
             isFingerGestureActive = true
             val burst = isPenUpFlushPending
             hidePenLayer()
             if (burst) onPenUpFlush() // the gesture's frames must not leave the burst's trace behind
         } else {
+            DiagLog.log(DiagLog.RAW, "fingerGesture off")
             isFingerGestureActive = false
             schedulePenLayerResume()
         }

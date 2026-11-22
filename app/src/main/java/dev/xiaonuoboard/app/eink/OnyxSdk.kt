@@ -35,6 +35,12 @@ internal object OnyxSdk {
         RxBaseAction.init(appContext)
     }
 
+    /**
+     * Raw stylus pressure scale (`TouchPoint.pressure` is raw digitizer units, 0..this). The SDM / RK
+     * implementations reflect the framework value and fall back to 2048 (base class: 1024).
+     */
+    fun maxTouchPressure(): Float = EpdController.getMaxTouchPressure()
+
     /** Forces `EpdController` / `Device` class init (the BOOX device probe). Throws if unusable. */
     fun probeEpd(): String {
         // Accessing a static triggers <clinit> → Device.currentDevice() detection.

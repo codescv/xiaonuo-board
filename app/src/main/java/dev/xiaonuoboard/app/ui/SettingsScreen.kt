@@ -36,6 +36,8 @@ import dev.xiaonuoboard.app.BuildConfig
 import dev.xiaonuoboard.app.ai.AiPipeline
 import dev.xiaonuoboard.app.ai.GeminiModels
 import dev.xiaonuoboard.app.data.BitmapIO
+import dev.xiaonuoboard.app.data.DiagLogExporter
+import dev.xiaonuoboard.app.eink.DiagLog
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.update.InstallLaunchResult
@@ -144,7 +146,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
 
         EinkCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("BOOX 墨水屏与交互体验", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                Text("BOOX 墨水屏、交互与诊断", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
                 // Real runtime state: BOOX hardware? SDK initialized? TouchHelper raw pen armed?
                 Text(OnyxEinkBridge.statusText, fontSize = 14.sp, color = Eink.Muted)
                 OnyxEinkBridge.deviceDetail?.let { Text("Onyx 设备：$it", fontSize = 12.sp, color = Eink.Muted) }
@@ -161,6 +163,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
                 EinkSegmented(listOf(false to "👆 手笔皆可", true to "✍️ 仅笔作画"), settings.stylusOnly) { on ->
                     container.settings.update { it.copy(stylusOnly = on) }
                 }
+                DiagnosticsSection(container)
             }
         }
 
@@ -175,6 +178,52 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
 
         OtaUpdateCard(container)
     }
+}
+
+/** 诊断：export / share the [DiagLog] ring buffer (pen latency, refreshes, TouchHelper state). */
+@Composable
+private fun DiagnosticsSection(container: AppContainer) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    Text("诊断", fontWeight = FontWeight.Bold)
+    Text(
+        "记录笔迹延迟、刷新与 BOOX 手写层状态（最近 ${DiagLog.capacity} 条，当前 ${DiagLog.count} 条，不含画作内容）。" +
+            "遇到卡顿时先画几笔，再导出日志发给开发者。",
+        fontSize = 14.sp, color = Eink.Muted,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        EinkButton("导出诊断日志", Modifier.weight(1f), enabled = !busy) {
+            busy = true
+            status = "正在导出…"
+            val snapshot = container.settings.current
+            scope.launch {
+                status = withContext(Dispatchers.IO) {
+                    runCatching { DiagLogExporter.saveToDownloads(context, snapshot) }
+                        .fold({ "✓ 已保存 ${it.entries} 条日志到 ${it.location}" }, { "✗ 导出失败：${it.message}" })
+                }
+                busy = false
+            }
+        }
+        EinkButton("分享日志", Modifier.weight(1f), enabled = !busy) {
+            busy = true
+            val snapshot = container.settings.current
+            scope.launch {
+                val shared = withContext(Dispatchers.IO) { runCatching { DiagLogExporter.shareIntent(context, snapshot) } }
+                status = shared.fold(
+                    { (intent, res) ->
+                        runCatching { context.startActivity(intent) }
+                            .fold({ "已打开分享（${res.entries} 条 · ${res.location}）" }, { "✗ 无法分享：${it.message}" })
+                    },
+                    { "✗ 分享失败：${it.message}" },
+                )
+                busy = false
+            }
+        }
+    }
+    status?.let { Text(it, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable

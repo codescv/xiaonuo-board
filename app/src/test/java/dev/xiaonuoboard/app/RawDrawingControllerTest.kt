@@ -25,14 +25,15 @@ class RawDrawingControllerTest {
         var lastLimit: DirtyRect? = null
         var lastExclude: List<DirtyRect> = emptyList()
         var lastStroke: Pair<Float, Int>? = null
+        var lastPressureStyle: Boolean? = null
         var enabled = false
         var render = false
         var open = false
 
-        override fun open(limit: DirtyRect, exclude: List<DirtyRect>, strokeWidth: Float, strokeColor: Int): Boolean {
+        override fun open(limit: DirtyRect, exclude: List<DirtyRect>, strokeWidth: Float, strokeColor: Int, pressureSensitive: Boolean): Boolean {
             opens++
             log += "open"
-            lastLimit = limit; lastExclude = exclude; lastStroke = strokeWidth to strokeColor
+            lastLimit = limit; lastExclude = exclude; lastStroke = strokeWidth to strokeColor; lastPressureStyle = pressureSensitive
             open = openOk
             return openOk
         }
@@ -49,17 +50,26 @@ class RawDrawingControllerTest {
             if (!renderOk) return false
             render = enabled; return true
         }
-        override fun setStroke(width: Float, color: Int): Boolean { log += "stroke"; lastStroke = width to color; return true }
+        override fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean {
+            log += "stroke"; lastStroke = width to color; lastPressureStyle = pressureSensitive; return true
+        }
         override fun close() { log += "close"; open = false; enabled = false; render = false }
     }
 
     private class FakeSink : RawStrokeSink {
         val events = mutableListOf<String>()
+        val pressures = mutableListOf<Float>()
+        val times = mutableListOf<Long>()
         override fun rawStrokeBegin(x: Float, y: Float, pressure: Float, time: Long, erasing: Boolean) {
             events += "begin(${x.toInt()},${y.toInt()}${if (erasing) ",erase" else ""})"
+            pressures += pressure; times += time
         }
-        override fun rawStrokeMove(x: Float, y: Float, pressure: Float, time: Long) { events += "move(${x.toInt()},${y.toInt()})" }
-        override fun rawStrokeEnd(x: Float, y: Float, pressure: Float, time: Long) { events += "end(${x.toInt()},${y.toInt()})" }
+        override fun rawStrokeMove(x: Float, y: Float, pressure: Float, time: Long) {
+            events += "move(${x.toInt()},${y.toInt()})"; pressures += pressure; times += time
+        }
+        override fun rawStrokeEnd(x: Float, y: Float, pressure: Float, time: Long) {
+            events += "end(${x.toInt()},${y.toInt()})"; pressures += pressure; times += time
+        }
         override fun rawStrokeAbort() { events += "abort" }
     }
 
@@ -668,5 +678,66 @@ class RawDrawingControllerTest {
     fun debounceIsLongerThanAKidsPenLiftButShorterThanOnyxsOwnPenUpRefresh() {
         assertTrue(RawDrawingController.PEN_UP_FLUSH_DELAY_MS in 300L..500L)
         assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS > RawDrawingController.RENDER_RESUME_DELAY_MS)
+    }
+    // ---------------- pressure propagation / pressure pen style ----------------
+
+    @Test
+    fun rawPressureAndTimestampsReachTheSinkUnchanged() {
+        val r = Rig().armed()
+        r.c.onRawBegin(10f, 10f, 812f, 100L, false)
+        r.c.onRawMove(12f, 12f, 2048f, 101L, false)
+        r.c.onRawMove(14f, 14f, 4095f, 102L, false)
+        r.c.onRawEnd(14f, 14f, 0f, 103L, false)
+        assertEquals(listOf(812f, 2048f, 4095f, 0f), r.sink.pressures)
+        assertEquals(listOf(100L, 101L, 102L, 103L), r.sink.times)
+    }
+
+    @Test
+    fun pointListPressuresAreForwardedWhenNoMovesArrived() {
+        val r = Rig().armed()
+        r.c.onRawBegin(10f, 10f, 500f, 0L, false)
+        r.c.onRawPoints(floatArrayOf(11f, 12f), floatArrayOf(11f, 12f), floatArrayOf(1000f, 3000f), longArrayOf(1L, 2L), false)
+        r.c.onRawEnd(12f, 12f, 0f, 3L, false)
+        assertEquals(listOf(500f, 1000f, 3000f, 0f), r.sink.pressures)
+        // A mismatched (shorter) pressure array is truncated, never read out of bounds.
+        r.sink.pressures.clear()
+        r.c.onRawBegin(10f, 10f, 1f, 4L, false)
+        r.c.onRawPoints(floatArrayOf(11f, 12f, 13f), floatArrayOf(11f, 12f, 13f), floatArrayOf(7f), longArrayOf(5L, 6L, 7L), false)
+        assertEquals(listOf(1f, 7f), r.sink.pressures)
+    }
+
+    @Test
+    fun pressureStyleIsPassedToOpenAndStrokeChangesAndFlushesTheBurst() {
+        val r = Rig()
+        r.c.setStroke(16f, 0xFFFF0000.toInt(), pressureSensitive = true)
+        r.armed() // armed() re-sets (12, red) without the flag → the eraser-like constant style
+        assertEquals(false, r.backend.lastPressureStyle)
+        r.c.setStroke(16f, 0xFFFF0000.toInt(), pressureSensitive = true)
+        assertEquals(true, r.backend.lastPressureStyle)
+        assertEquals(16f to 0xFFFF0000.toInt(), r.backend.lastStroke)
+        // Only the style changes (crayon → same-size eraser colour stays): still pushed + burst flushed.
+        r.canvasStroke()
+        r.backend.log.clear()
+        r.c.setStroke(16f, 0xFFFF0000.toInt(), pressureSensitive = false)
+        assertEquals(listOf("stroke"), r.backend.log.filter { it == "stroke" })
+        assertEquals(false, r.backend.lastPressureStyle)
+        assertEquals(1, r.flushes)
+        // Re-opening after a close keeps the current style.
+        r.c.setStroke(16f, 0xFFFF0000.toInt(), pressureSensitive = true)
+        r.c.setAttached(false)
+        r.c.setAttached(true)
+        assertEquals(true, r.backend.lastPressureStyle)
+        assertEquals(2, r.backend.opens)
+    }
+
+    @Test
+    fun beginRecordsWhetherThePenLayerWasAlreadyLive() {
+        val r = Rig().armed()
+        r.stroke()
+        assertTrue(r.c.lastBeginRenderWasEnabled)
+        r.c.hidePenLayer()
+        r.stroke()
+        assertFalse("layer was hidden at pen-down", r.c.lastBeginRenderWasEnabled)
+        assertTrue("…and is resumed by the pen-down", r.c.isRenderEnabled)
     }
 }

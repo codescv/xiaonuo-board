@@ -51,6 +51,11 @@ class ColoringCanvasController(
 
     private var strokeActive = false
     private var strokeRect: DirtyRect = DirtyRect.EMPTY
+    // Pressure state of the current stroke (plain fields: the per-sample path stays allocation-free).
+    private var baseRadius = 0f
+    private var pressureEnabled = false
+    private var pressureSeeded = false
+    private var smoothedMult = StrokePressure.NEUTRAL
     var actionCount: Int = 0
         private set
 
@@ -77,25 +82,47 @@ class ColoringCanvasController(
         return finishAction(rect)
     }
 
-    fun strokeBegin(x: Float, y: Float, kind: PointerKind = PointerKind.STYLUS): Boolean {
+    fun strokeBegin(x: Float, y: Float, kind: PointerKind = PointerKind.STYLUS, pressure: Float = StrokePressure.NO_PRESSURE): Boolean {
         if (tool == Tool.FILL || !accepts(kind)) return false
         val erasing = tool == Tool.ERASER || kind == PointerKind.ERASER_TIP
-        brush.radius = if (erasing) brushSize.radius * 1.5f else brushSize.radius
+        baseRadius = if (erasing) brushSize.radius * 1.5f else brushSize.radius
+        // Only a pen drawing with the crayon is pressure-modulated: fingers / mice have no meaningful
+        // pressure, and the eraser stays predictable (it also matches the constant-width hardware
+        // eraser trace on BOOX).
+        pressureEnabled = !erasing && kind == PointerKind.STYLUS
+        smoothedMult = if (pressureEnabled && StrokePressure.isValid(pressure)) StrokePressure.multiplier(pressure) else StrokePressure.NEUTRAL
+        pressureSeeded = pressureEnabled && StrokePressure.isValid(pressure)
+        brush.radius = baseRadius * smoothedMult
         brush.color = if (erasing) CrayonBrush.ERASE_COLOR else color
         undoStack.beginAction()
         strokeActive = true
-        strokeRect = brush.begin(x, y, stayInsideLines, captureHook)
+        strokeRect = brush.begin(x, y, stayInsideLines, captureHook, lockRadius = baseRadius)
         if (!strokeRect.isEmpty) onDirty?.invoke(strokeRect)
         return true
     }
 
-    fun strokeMove(x: Float, y: Float): DirtyRect {
+    /**
+     * Continues the stroke to (x, y). [pressure] is normalized `[0, 1]` (see [StrokePressure]); an
+     * unusable reading keeps the current width. The width is EMA-smoothed across samples and
+     * interpolated along the segment by the brush.
+     */
+    fun strokeMove(x: Float, y: Float, pressure: Float = StrokePressure.NO_PRESSURE): DirtyRect {
         if (!strokeActive) return DirtyRect.EMPTY
+        if (pressureEnabled && StrokePressure.isValid(pressure)) {
+            val target = StrokePressure.multiplier(pressure)
+            // The first usable reading seeds the EMA (pen-down samples may carry no pressure).
+            smoothedMult = if (pressureSeeded) StrokePressure.smooth(smoothedMult, target) else target
+            pressureSeeded = true
+            brush.radius = baseRadius * smoothedMult
+        }
         val r = brush.moveTo(x, y, captureHook)
         strokeRect = strokeRect.union(r)
         if (!r.isEmpty) onDirty?.invoke(r)
         return r
     }
+
+    /** Current (pressure-modulated) brush radius in canvas px; diagnostics / tests. */
+    val currentBrushRadius: Float get() = brush.radius
 
     /** Ends the stroke; returns the union rect of the whole stroke for the post-stroke E-Ink refresh. */
     fun strokeEnd(): DirtyRect {

@@ -1,6 +1,7 @@
 package dev.xiaonuoboard.app.eink
 
 import dev.xiaonuoboard.app.engine.DirtyRect
+import dev.xiaonuoboard.app.engine.StrokePressure
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -33,9 +34,16 @@ object RawDrawingGeometry {
 
     val CLEAR_EXCLUDES = DirtyRect(-10_000, -10_000, -10_000, -10_000)
 
-    /** Hardware trace width in screen px: the brush diameter (eraser ×1.5, like the engine) at the zoom. */
-    fun traceWidthPx(brushRadius: Float, eraser: Boolean, viewScale: Float): Float =
-        brushRadius * (if (eraser) ERASER_SCALE else 1f) * 2f * viewScale
+    /**
+     * Hardware trace width in screen px: the brush diameter (eraser ×1.5, like the engine) at the
+     * zoom. With [pressureSensitive] (firmware FOUNTAIN pen, whose width is the MAXIMUM it reaches at
+     * full pressure) it is the firm-press diameter ([StrokePressure.MAX_MULT]), so the live trace
+     * spans the same range as the pressure-modulated crayon, and the pen-up refresh rect derived from
+     * it always covers the widest trace.
+     */
+    fun traceWidthPx(brushRadius: Float, eraser: Boolean, viewScale: Float, pressureSensitive: Boolean = false): Float =
+        brushRadius * (if (eraser) ERASER_SCALE else 1f) * 2f * viewScale *
+            (if (pressureSensitive && !eraser) StrokePressure.MAX_MULT else 1f)
 
     const val ERASER_SCALE = 1.5f
 }
