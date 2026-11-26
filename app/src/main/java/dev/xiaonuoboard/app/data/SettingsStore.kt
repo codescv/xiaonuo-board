@@ -6,11 +6,14 @@ import dev.xiaonuoboard.app.ai.GeminiConfig
 import dev.xiaonuoboard.app.ai.GeminiModels
 import dev.xiaonuoboard.app.eink.BooxSdkMode
 import dev.xiaonuoboard.app.eink.EinkMode
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class AppSettings(
+    val language: AppLanguage = AppLanguage.SYSTEM,
     val apiKey: String = "",
     val baseUrl: String = GeminiModels.DEFAULT_BASE_URL,
     val model: String = GeminiModels.DEFAULT,
@@ -29,14 +32,16 @@ data class AppSettings(
  * Parent settings persisted in private SharedPreferences (backup disabled in the manifest).
  * The API key is encrypted at rest with an Android Keystore AES-GCM key ([SecretCipher]).
  */
-class SettingsStore(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("xiaonuo_settings", Context.MODE_PRIVATE)
-    private val state = MutableStateFlow(load())
+class SettingsStore(private val prefs: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences("xiaonuo_settings", Context.MODE_PRIVATE))
+
+    private val state = MutableStateFlow(load().also { AppI18n.setLanguage(it.language) })
     val settings: StateFlow<AppSettings> = state.asStateFlow()
 
     val current: AppSettings get() = state.value
 
     private fun load() = AppSettings(
+        language = AppLanguage.fromStorageKey(prefs.getString(K_LANGUAGE, AppLanguage.SYSTEM.storageKey)),
         apiKey = SecretCipher.decrypt(prefs.getString(K_KEY, "") ?: ""),
         baseUrl = prefs.getString(K_BASE, GeminiModels.DEFAULT_BASE_URL) ?: GeminiModels.DEFAULT_BASE_URL,
         model = prefs.getString(K_MODEL, GeminiModels.DEFAULT) ?: GeminiModels.DEFAULT,
@@ -52,6 +57,7 @@ class SettingsStore(context: Context) {
     fun update(transform: (AppSettings) -> AppSettings) {
         val s = transform(state.value)
         prefs.edit()
+            .putString(K_LANGUAGE, s.language.storageKey)
             .putString(K_KEY, SecretCipher.encrypt(s.apiKey))
             .putString(K_BASE, s.baseUrl)
             .putString(K_MODEL, s.model)
@@ -63,10 +69,12 @@ class SettingsStore(context: Context) {
             .putBoolean(K_GHOST, s.ghostUnderlay)
             .putLong(K_UPDATE_CHECK, s.updateLastCheckMs)
             .apply()
+        AppI18n.setLanguage(s.language)
         state.value = s
     }
 
     private companion object {
+        const val K_LANGUAGE = "ui_language"
         const val K_KEY = "gemini_api_key"
         const val K_BASE = "gemini_base_url"
         const val K_MODEL = "gemini_model"

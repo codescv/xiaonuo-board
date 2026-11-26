@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.xiaonuoboard.app.data.HomeTabs
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -32,7 +33,8 @@ object KidIcons {
 
     @Composable
     fun BackArrow(tint: Color, modifier: Modifier = Modifier.size(34.dp)) {
-        Canvas(modifier.semantics { contentDescription = "返回" }) {
+        val desc = LocalAppStrings.current.cdBack
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.12f
             val p = Path().apply {
@@ -48,7 +50,8 @@ object KidIcons {
     /** Classic tilted wax crayon with pointed tip and paper wrapper bands. */
     @Composable
     fun Crayon(tint: Color, modifier: Modifier = Modifier.size(36.dp)) {
-        Canvas(modifier.semantics { contentDescription = "蜡笔" }) {
+        val desc = LocalAppStrings.current.cdCrayon
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             rotate(-42f, pivot = Offset(s * 0.5f, s * 0.5f)) {
@@ -87,7 +90,8 @@ object KidIcons {
     /** Tilted paint bucket with handle and pouring paint drop. */
     @Composable
     fun PaintBucket(tint: Color, modifier: Modifier = Modifier.size(36.dp)) {
-        Canvas(modifier.semantics { contentDescription = "油漆桶" }) {
+        val desc = LocalAppStrings.current.cdPaintBucket
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             // Tilted bucket body
@@ -125,7 +129,8 @@ object KidIcons {
     /** Chunky two-tone diagonal school eraser with paper sleeve and erase line. */
     @Composable
     fun Eraser(tint: Color, modifier: Modifier = Modifier.size(36.dp)) {
-        Canvas(modifier.semantics { contentDescription = "橡皮" }) {
+        val desc = LocalAppStrings.current.cdEraser
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             // Ground line being erased
@@ -155,7 +160,8 @@ object KidIcons {
     /** Stay-inside-lines padlock (locked vs unlocked). */
     @Composable
     fun ClipLock(locked: Boolean, tint: Color, modifier: Modifier = Modifier.size(34.dp)) {
-        Canvas(modifier.semantics { contentDescription = if (locked) "已锁定不出线" else "自由涂鸦" }) {
+        val desc = if (locked) LocalAppStrings.current.cdClipLocked else LocalAppStrings.current.cdClipUnlocked
+        Canvas(modifier.semantics { contentDescription = desc }) {
             drawPadlock(locked, tint)
         }
     }
@@ -204,7 +210,8 @@ object KidIcons {
     /** Bold curved undo arrow. */
     @Composable
     fun Undo(tint: Color, modifier: Modifier = Modifier.size(34.dp)) {
-        Canvas(modifier.semantics { contentDescription = "撤销" }) {
+        val desc = LocalAppStrings.current.cdUndo
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.105f
             val arrow = Path().apply {
@@ -226,7 +233,8 @@ object KidIcons {
     /** Crisp 4-point sparkle icon for E-Ink full refresh (清残影). */
     @Composable
     fun SparkleRefresh(tint: Color, modifier: Modifier = Modifier.size(34.dp)) {
-        Canvas(modifier.semantics { contentDescription = "清残影" }) {
+        val desc = LocalAppStrings.current.cdClearGhosting
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             fun star(cx: Float, cy: Float, r: Float): Path = Path().apply {
                 moveTo(cx, cy - r)
@@ -244,7 +252,8 @@ object KidIcons {
     /** Save / export down-arrow into tray. */
     @Composable
     fun SaveExport(tint: Color, modifier: Modifier = Modifier.size(34.dp)) {
-        Canvas(modifier.semantics { contentDescription = "保存导出" }) {
+        val desc = LocalAppStrings.current.cdSaveExport
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.10f
             drawLine(tint, Offset(s * 0.50f, s * 0.16f), Offset(s * 0.50f, s * 0.62f), sw, StrokeCap.Round)
@@ -267,7 +276,8 @@ object KidIcons {
     /** Circular trash / clear-page icon for Reset (重置). */
     @Composable
     fun ResetPage(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "重置画布" }) {
+        val desc = LocalAppStrings.current.cdResetCanvas
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.10f
             // Lid
@@ -303,7 +313,8 @@ object KidIcons {
     /** Stylus-only nib vs Finger+Stylus icon. */
     @Composable
     fun StylusMode(stylusOnly: Boolean, tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = if (stylusOnly) "仅笔作画" else "手笔皆可" }) {
+        val desc = if (stylusOnly) LocalAppStrings.current.cdStylusOnly else LocalAppStrings.current.cdFingerAndStylus
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.09f
             // Pen nib
@@ -327,7 +338,8 @@ object KidIcons {
     /** Eye icon for translucent reference ghost underlay. */
     @Composable
     fun Eye(active: Boolean, tint: Color, modifier: Modifier = Modifier.size(26.dp)) {
-        Canvas(modifier.semantics { contentDescription = "参考底稿" }) {
+        val desc = LocalAppStrings.current.cdGhostUnderlay
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.10f
             val eye = Path().apply {
@@ -344,7 +356,8 @@ object KidIcons {
     /** Diagonal expand arrows for PiP. */
     @Composable
     fun Expand(tint: Color, modifier: Modifier = Modifier.size(24.dp)) {
-        Canvas(modifier.semantics { contentDescription = "放大参考图" }) {
+        val desc = LocalAppStrings.current.cdExpandRef
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.11f
             drawLine(tint, Offset(s * 0.22f, s * 0.78f), Offset(s * 0.78f, s * 0.22f), sw, StrokeCap.Round)
@@ -362,7 +375,8 @@ object KidIcons {
     /** Collapse chevron for PiP. */
     @Composable
     fun Collapse(tint: Color, modifier: Modifier = Modifier.size(24.dp)) {
-        Canvas(modifier.semantics { contentDescription = "收起参考图" }) {
+        val desc = LocalAppStrings.current.cdCollapseRef
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.12f
             val p = Path().apply {
@@ -377,7 +391,8 @@ object KidIcons {
     /** Palette / color-dots toggle icon for showing or hiding the full 16-color tray. */
     @Composable
     fun MoreColors(expanded: Boolean, tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = if (expanded) "收起更多颜色" else "展开更多颜色" }) {
+        val desc = if (expanded) LocalAppStrings.current.cdCollapseMoreColors else LocalAppStrings.current.cdExpandMoreColors
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.095f
             if (expanded) {
@@ -402,7 +417,8 @@ object KidIcons {
     /** Picture frame icon for collapsed PiP button. */
     @Composable
     fun RefPicture(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "显示参考图" }) {
+        val desc = LocalAppStrings.current.cdShowRef
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.095f
             drawRoundRect(
@@ -445,7 +461,8 @@ object KidIcons {
     /** App logo: artist palette with a thumb notch and four colored paint dots (ink-outlined). */
     @Composable
     fun PaletteLogo(tint: Color, modifier: Modifier = Modifier.size(40.dp), colorful: Boolean = true) {
-        Canvas(modifier.semantics { contentDescription = "小诺画板" }) {
+        val desc = LocalAppStrings.current.appName
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             val palette = Path().apply {
@@ -475,7 +492,8 @@ object KidIcons {
     /** Magic wand with a big sparkle (AI 魔法画坊). */
     @Composable
     fun MagicWand(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "AI 魔法" }) {
+        val desc = LocalAppStrings.current.cdAiMagic
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.11f
             drawLine(tint, Offset(s * 0.16f, s * 0.86f), Offset(s * 0.56f, s * 0.46f), sw, StrokeCap.Round)
@@ -488,13 +506,15 @@ object KidIcons {
     /** Small closed padlock: the button opens a parent-locked area (家长锁). */
     @Composable
     fun ParentLock(tint: Color, modifier: Modifier = Modifier.size(22.dp)) {
-        Canvas(modifier.semantics { contentDescription = "家长锁" }) { drawPadlock(locked = true, tint = tint) }
+        val desc = LocalAppStrings.current.cdParentLock
+        Canvas(modifier.semantics { contentDescription = desc }) { drawPadlock(locked = true, tint = tint) }
     }
 
     /** Chunky 8-tooth settings gear (家长设置). */
     @Composable
     fun Gear(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "家长设置" }) {
+        val desc = LocalAppStrings.current.cdParentSettings
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.10f
             val c = Offset(s * 0.5f, s * 0.5f)
@@ -516,7 +536,8 @@ object KidIcons {
     /** Bold up-arrow in a ring: a new app version is ready (新版). */
     @Composable
     fun UpdateArrow(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "新版本" }) {
+        val desc = LocalAppStrings.current.cdNewVersion
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.10f
             drawCircle(tint, radius = s * 0.40f, center = Offset(s * 0.5f, s * 0.5f), style = Stroke(sw))
@@ -533,7 +554,8 @@ object KidIcons {
     /** Six-armed snowflake with V branches (艾莎 / Frozen). */
     @Composable
     fun Snowflake(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "雪花" }) {
+        val desc = LocalAppStrings.current.cdSnowflake
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             val c = Offset(s * 0.5f, s * 0.5f)
@@ -551,7 +573,8 @@ object KidIcons {
     /** Puppy face with floppy ears and a big nose (布鲁伊 / Bluey). */
     @Composable
     fun Dog(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "小狗" }) {
+        val desc = LocalAppStrings.current.cdDog
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             drawRoundRect(
@@ -588,7 +611,8 @@ object KidIcons {
     /** Round piggy face with a big snout (小猪佩奇 / Peppa Pig). */
     @Composable
     fun Pig(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "小猪" }) {
+        val desc = LocalAppStrings.current.cdPig
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             val earL = Path().apply {
@@ -618,7 +642,8 @@ object KidIcons {
     /** Round bun-hero face: big round nose and cheeks, happy smile (面包超人 / Anpanman). */
     @Composable
     fun BunFace(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "面包脸" }) {
+        val desc = LocalAppStrings.current.cdBunFace
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             drawCircle(tint, radius = s * 0.40f, center = Offset(s * 0.5f, s * 0.5f), style = Stroke(sw))
@@ -642,7 +667,8 @@ object KidIcons {
     /** Bold "AB" letters (字母). */
     @Composable
     fun Letters(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "字母" }) {
+        val desc = LocalAppStrings.current.cdLetters
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.095f
             val style = Stroke(sw, cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -666,7 +692,8 @@ object KidIcons {
     /** Framed picture hanging on a nail (我的作品). */
     @Composable
     fun GalleryFrame(tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
-        Canvas(modifier.semantics { contentDescription = "我的作品" }) {
+        val desc = LocalAppStrings.current.cdMyWorks
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.085f
             val string = Path().apply {
@@ -710,7 +737,8 @@ object KidIcons {
     /** Solid five-point star (已涂 / 已完成 badges). */
     @Composable
     fun Star(tint: Color, modifier: Modifier = Modifier.size(16.dp)) {
-        Canvas(modifier.semantics { contentDescription = "星星" }) {
+        val desc = LocalAppStrings.current.cdStar
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val cx = s * 0.5f
             val cy = s * 0.54f
@@ -734,7 +762,8 @@ object KidIcons {
     /** Thick pager chevron (◀ / ▶ replacement). */
     @Composable
     fun Chevron(pointsLeft: Boolean, tint: Color, modifier: Modifier = Modifier.size(22.dp)) {
-        Canvas(modifier.semantics { contentDescription = if (pointsLeft) "上一页" else "下一页" }) {
+        val desc = if (pointsLeft) LocalAppStrings.current.cdPrevPage else LocalAppStrings.current.cdNextPage
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.16f
             val p = Path().apply {
@@ -751,7 +780,8 @@ object KidIcons {
     /** Blank page with a folded corner, a big plus and a sparkle (生成新涂色页). */
     @Composable
     fun NewPage(tint: Color, modifier: Modifier = Modifier.size(64.dp)) {
-        Canvas(modifier.semantics { contentDescription = "生成新涂色页" }) {
+        val desc = LocalAppStrings.current.cdNewColoringPage
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.07f
             val page = Path().apply {
@@ -776,7 +806,8 @@ object KidIcons {
     /** Backspace key: arrow-shaped key cap with an ✕ (parent-gate number pad). */
     @Composable
     fun Backspace(tint: Color, modifier: Modifier = Modifier.size(30.dp)) {
-        Canvas(modifier.semantics { contentDescription = "删除" }) {
+        val desc = LocalAppStrings.current.cdBackspace
+        Canvas(modifier.semantics { contentDescription = desc }) {
             val s = size.minDimension
             val sw = s * 0.09f
             val key = Path().apply {

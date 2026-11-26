@@ -1,5 +1,9 @@
 package dev.xiaonuoboard.app.data
 
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
+import dev.xiaonuoboard.app.i18n.ResolvedLanguage
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -25,7 +29,19 @@ data class BuiltinManifest(
 data class CanvasSize(val width: Int = 1200, val height: Int = 1600)
 
 @Serializable
-data class ManifestCategory(val id: String, val title: String)
+data class ManifestCategory(
+    val id: String,
+    val title: String,
+    @SerialName("title_zh") val titleZh: String = "",
+    @SerialName("title_en") val titleEn: String = "",
+    @SerialName("title_ja") val titleJa: String = "",
+) {
+    fun localizedTitle(lang: ResolvedLanguage): String = when (lang) {
+        ResolvedLanguage.ZH -> titleZh.ifBlank { title }
+        ResolvedLanguage.EN -> titleEn.ifBlank { title }
+        ResolvedLanguage.JA -> titleJa.ifBlank { title }
+    }
+}
 
 @Serializable
 data class ManifestPage(
@@ -33,12 +49,21 @@ data class ManifestPage(
     val category: String,
     val index: Int,
     val title: String,
+    @SerialName("title_zh") val titleZh: String = "",
+    @SerialName("title_en") val titleEn: String = "",
+    @SerialName("title_ja") val titleJa: String = "",
     val difficulty: String = "easy",
     val line: String,
     val ref: String? = null,
     val regions: Int = 0,
     val palette: List<String> = emptyList(),
-)
+) {
+    fun localizedTitle(lang: ResolvedLanguage): String = when (lang) {
+        ResolvedLanguage.ZH -> titleZh.ifBlank { title }
+        ResolvedLanguage.EN -> titleEn.ifBlank { title }
+        ResolvedLanguage.JA -> titleJa.ifBlank { title }
+    }
+}
 
 enum class PageSource { BUILTIN, AI, IMPORTED }
 
@@ -47,15 +72,27 @@ data class ColoringPage(
     val id: String,
     val category: String,
     val title: String,
+    val titleZh: String = title,
+    val titleEn: String = title,
+    val titleJa: String = title,
     val difficulty: String,
     /** Asset path (BUILTIN) or absolute file path (AI / IMPORTED). */
     val linePath: String,
     val refPath: String?,
     val source: PageSource,
     val palette: List<Int> = emptyList(),
-)
+) {
+    fun localizedTitle(lang: ResolvedLanguage): String = when (source) {
+        PageSource.BUILTIN -> when (lang) {
+            ResolvedLanguage.ZH -> titleZh.ifBlank { title }
+            ResolvedLanguage.EN -> titleEn.ifBlank { title }
+            ResolvedLanguage.JA -> titleJa.ifBlank { title }
+        }
+        PageSource.AI, PageSource.IMPORTED -> title
+    }
+}
 
-/** Home tabs: 4 IP packs + 字母 + AI 魔法 + 我的作品. */
+/** Home tabs: 4 IP packs + Alphabet + AI Magic + My Works. */
 object HomeTabs {
     const val AI = "ai"
     const val WORKS = "works"
@@ -63,15 +100,17 @@ object HomeTabs {
     /** Tab glyph, drawn by the UI as a custom E-Ink vector icon (`KidIcons.TabGlyph`) — no emoji. */
     enum class Icon { SNOWFLAKE, DOG, PIG, BUN_FACE, LETTERS, MAGIC, GALLERY }
 
-    data class Tab(val id: String, val title: String, val icon: Icon)
+    data class Tab(val id: String, val icon: Icon) {
+        fun title(strings: AppStrings = AppI18n.strings()): String = strings.tabTitle(id)
+    }
 
     val ALL = listOf(
-        Tab("elsa", "艾莎", Icon.SNOWFLAKE),
-        Tab("bluey", "布鲁伊", Icon.DOG),
-        Tab("peppa", "小猪佩奇", Icon.PIG),
-        Tab("anpanman", "面包超人", Icon.BUN_FACE),
-        Tab("alphabet", "字母", Icon.LETTERS),
-        Tab(AI, "AI 魔法", Icon.MAGIC),
-        Tab(WORKS, "我的作品", Icon.GALLERY),
+        Tab("elsa", Icon.SNOWFLAKE),
+        Tab("bluey", Icon.DOG),
+        Tab("peppa", Icon.PIG),
+        Tab("anpanman", Icon.BUN_FACE),
+        Tab("alphabet", Icon.LETTERS),
+        Tab(AI, Icon.MAGIC),
+        Tab(WORKS, Icon.GALLERY),
     )
 }

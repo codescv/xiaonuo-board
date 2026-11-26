@@ -31,6 +31,9 @@ import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.data.Artwork
 import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.HomeTabs
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import dev.xiaonuoboard.app.update.UpdateUiState
 
 private const val PAGE_SIZE = 4 // 2×2 paged grid: no scrolling → no E-Ink smearing
@@ -46,6 +49,7 @@ fun HomeScreen(
     onOpenAi: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val s = LocalAppStrings.current
     val works by container.artworks.works.collectAsState()
     val updateState by container.updater.state.collectAsState()
     val hasUpdate = updateState is UpdateUiState.Available || updateState is UpdateUiState.Ready
@@ -57,16 +61,16 @@ fun HomeScreen(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             KidIcons.PaletteLogo(Eink.Ink, Modifier.size(52.dp))
             Column(Modifier.weight(1f)) {
-                Text("小诺画板", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                Text("选一张喜欢的画开始涂色吧", fontSize = 16.sp, color = Eink.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(s.appName, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(s.homeSubtitle, fontSize = 16.sp, color = Eink.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             EinkIconTextButton(
-                "AI 画坊",
+                s.homeAiWorkshop,
                 leading = { tint -> KidIcons.MagicWand(tint, Modifier.size(28.dp)) },
                 trailing = { tint -> KidIcons.ParentLock(tint) },
             ) { onOpenAi() }
             EinkIconTextButton(
-                if (hasUpdate) "新版" else "",
+                if (hasUpdate) s.homeUpdateBadge else "",
                 selected = hasUpdate,
                 leading = { tint ->
                     if (hasUpdate) KidIcons.UpdateArrow(tint, Modifier.size(28.dp)) else KidIcons.Gear(tint, Modifier.size(30.dp))
@@ -81,7 +85,7 @@ fun HomeScreen(
                 row.forEach { t ->
                     val idx = HomeTabs.ALL.indexOf(t)
                     EinkIconTextButton(
-                        t.title,
+                        t.title(s),
                         selected = idx == selectedTab,
                         modifier = Modifier.weight(1f),
                         fontSize = 17,
@@ -132,16 +136,17 @@ private fun <T> TwoByTwo(items: List<T>, cell: @Composable (T, Modifier) -> Unit
 
 @Composable
 fun Pager(current: Int, pageCount: Int, total: Int, onPage: (Int) -> Unit) {
+    val s = LocalAppStrings.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         EinkIconTextButton(
-            "上一页",
+            s.pagerPrev,
             enabled = current > 0,
             modifier = Modifier.weight(1f),
             leading = { tint -> KidIcons.Chevron(pointsLeft = true, tint = tint) },
         ) { onPage(current - 1) }
-        Text("第 ${current + 1} / $pageCount 页 · 共 $total 张", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(s.pagerInfo(current + 1, pageCount, total), fontSize = 16.sp, fontWeight = FontWeight.Bold)
         EinkIconTextButton(
-            "下一页",
+            s.pagerNext,
             enabled = current < pageCount - 1,
             modifier = Modifier.weight(1f),
             trailing = { tint -> KidIcons.Chevron(pointsLeft = false, tint = tint) },
@@ -151,6 +156,7 @@ fun Pager(current: Int, pageCount: Int, total: Int, onPage: (Int) -> Unit) {
 
 @Composable
 private fun PageCard(page: ColoringPage, done: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val s = LocalAppStrings.current
     Column(
         modifier
             .background(Eink.White, Eink.Shape)
@@ -172,15 +178,15 @@ private fun PageCard(page: ColoringPage, done: Boolean, modifier: Modifier, onCl
                 )
             }
             if (done) {
-                StarBadge("已涂", Modifier.align(Alignment.TopStart))
+                StarBadge(s.badgeColored, Modifier.align(Alignment.TopStart))
             }
         }
-        Text(page.title, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(difficultyLabel(page.difficulty), fontSize = 14.sp, color = Eink.Muted)
+        Text(page.localizedTitle(s.language), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(difficultyLabel(page.difficulty, s), fontSize = 14.sp, color = Eink.Muted)
     }
 }
 
-/** Inverted ink badge with a vector star (已涂 / 已完成) — replaces the "★" glyph. */
+/** Inverted ink badge with a vector star — replaces the "★" glyph. */
 @Composable
 fun StarBadge(text: String, modifier: Modifier = Modifier, fontSize: Int = 14) {
     Row(
@@ -193,16 +199,11 @@ fun StarBadge(text: String, modifier: Modifier = Modifier, fontSize: Int = 14) {
     }
 }
 
-fun difficultyLabel(d: String) = when (d) {
-    "easy" -> "幼儿简单"
-    "standard" -> "进阶场景"
-    "ai" -> "AI 生成"
-    "imported" -> "本地导入"
-    else -> d
-}
+fun difficultyLabel(d: String, strings: AppStrings = AppI18n.strings()) = strings.difficultyLabel(d)
 
 @Composable
 private fun NewAiCard(modifier: Modifier, onClick: () -> Unit) {
+    val s = LocalAppStrings.current
     Column(
         modifier
             .background(Eink.Paper, Eink.Shape)
@@ -214,8 +215,8 @@ private fun NewAiCard(modifier: Modifier, onClick: () -> Unit) {
     ) {
         KidIcons.NewPage(Eink.Ink, Modifier.size(72.dp))
         Spacer(Modifier.height(8.dp))
-        Text("生成新涂色页", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-        Text("进入魔法画坊（家长锁）", fontSize = 14.sp, color = Eink.Muted)
+        Text(s.homeNewAiTitle, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        Text(s.homeNewAiSubtitle, fontSize = 14.sp, color = Eink.Muted)
     }
 }
 
@@ -229,6 +230,7 @@ private fun WorksGrid(
     onFresh: (String) -> Unit,
     modifier: Modifier,
 ) {
+    val s = LocalAppStrings.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (works.isEmpty()) {
             Column(
@@ -240,7 +242,7 @@ private fun WorksGrid(
                     KidIcons.GalleryFrame(Eink.Ink, Modifier.size(96.dp))
                     KidIcons.Crayon(Eink.Ink, Modifier.size(64.dp))
                 }
-                Text("还没有作品，去选一张画开始涂色吧！", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(s.homeNoWorks, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             return@Column
         }

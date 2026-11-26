@@ -1,34 +1,46 @@
 package dev.xiaonuoboard.app.ai
 
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
+
 /**
- * Prompt templates for the AI 魔法画坊 3-step pipeline.
+ * Prompt templates for the AI Magic Studio 3-step pipeline.
  * Subjects are described as ORIGINAL characters/themes (no third-party character likenesses).
+ *
+ * IMPORTANT: All model prompt strings (`Chip.english`, `Difficulty.spec`, `LINE_RULES`,
+ * `COLORIZE`, `ALPHABET_OBJECTS`) MUST remain English for consistent image generation.
  */
 object PromptBuilder {
 
-    enum class Difficulty(val label: String, val spec: String) {
-        EASY("幼儿大色块", "very thick bold black outlines (about 10px at 1200x1600), 10 to 18 large closed regions, no background clutter, plain white background"),
-        STANDARD("进阶细线", "clear bold black outlines (about 6px at 1200x1600), 20 to 40 closed regions, a cute sidekick and a simple background"),
+    enum class Difficulty(val spec: String) {
+        EASY("very thick bold black outlines (about 10px at 1200x1600), 10 to 18 large closed regions, no background clutter, plain white background"),
+        STANDARD("clear bold black outlines (about 6px at 1200x1600), 20 to 40 closed regions, a cute sidekick and a simple background"),
+        ;
+
+        fun label(strings: AppStrings = AppI18n.strings()): String = strings.promptDifficultyLabel(this)
     }
 
-    data class Chip(val label: String, val english: String)
+    data class Chip(val id: String, val english: String) {
+        fun label(strings: AppStrings = AppI18n.strings()): String =
+            strings.promptCharacters[id] ?: strings.promptScenes[id] ?: id
+    }
 
     val CHARACTERS = listOf(
-        Chip("冰雪公主", "an original cute winter princess with a snowflake dress"),
-        Chip("小狗狗", "an original cheerful cartoon puppy"),
-        Chip("小猪猪", "an original happy cartoon piglet in rain boots"),
-        Chip("面包小英雄", "an original friendly bakery hero made of bread loaves"),
-        Chip("小恐龙", "an original cute baby dinosaur"),
-        Chip("小猫咪", "an original cute kitten"),
+        Chip("winter_princess", "an original cute winter princess with a snowflake dress"),
+        Chip("puppy", "an original cheerful cartoon puppy"),
+        Chip("piglet", "an original happy cartoon piglet in rain boots"),
+        Chip("bread_hero", "an original friendly bakery hero made of bread loaves"),
+        Chip("dinosaur", "an original cute baby dinosaur"),
+        Chip("kitten", "an original cute kitten"),
     )
 
     val SCENES = listOf(
-        Chip("雪地堆雪人", "building a snowman in the snow"),
-        Chip("海边建城堡", "building a sandcastle at the beach"),
-        Chip("生日大蛋糕", "with a big birthday cake"),
-        Chip("彩虹热气球", "riding a hot air balloon under a rainbow"),
-        Chip("太空火箭", "flying a little rocket in space"),
-        Chip("花园野餐", "having a picnic in a flower garden"),
+        Chip("snowman", "building a snowman in the snow"),
+        Chip("sandcastle", "building a sandcastle at the beach"),
+        Chip("birthday_cake", "with a big birthday cake"),
+        Chip("hot_air_balloon", "riding a hot air balloon under a rainbow"),
+        Chip("space_rocket", "flying a little rocket in space"),
+        Chip("garden_picnic", "having a picnic in a flower garden"),
     )
 
     private const val LINE_RULES =
@@ -59,7 +71,7 @@ object PromptBuilder {
             "Fill each closed region with ONE flat, bright, highly saturated color (no gradients, no texture, no " +
             "shading), suitable for a color E-Ink screen. Output the same 3:4 image."
 
-    /** Alphabet helper: A–Z themed objects (same theme words as built-in packs). */
+    /** Alphabet helper: A–Z themed objects (English model prompt words, matching built-in packs). */
     val ALPHABET_OBJECTS = listOf(
         "apple", "bear", "cat", "dog", "egg", "fish", "grapes", "house", "ice cream", "jellyfish", "kite", "lion",
         "moon", "nest", "octopus", "penguin", "queen's crown", "rainbow", "sun", "tree", "umbrella", "volcano",

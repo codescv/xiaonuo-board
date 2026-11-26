@@ -5,27 +5,35 @@ import android.graphics.Rect
 import android.os.Build
 import android.util.Log
 import android.view.View
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 
 /** App-level E-Ink refresh modes (mapped onto Onyx `UpdateMode` in [OnyxSdk]). */
-enum class EinkMode(val label: String) {
+enum class EinkMode {
     /** Balanced partial refresh (Onyx GU). */
-    NORMAL("标准"),
+    NORMAL,
     /** BOOX "Regal" clear mode — sharp UI, low ghosting (default for browsing pages). */
-    REGAL("REGAL 清晰"),
+    REGAL,
     /** Fast DU mode for pen strokes & panning (some ghosting). */
-    FAST("快速"),
+    FAST,
     /** Full-waveform flash (GC): clears ghosting. */
-    FULL("全刷"),
+    FULL,
+    ;
+
+    fun label(strings: AppStrings = AppI18n.strings()): String = strings.einkModeLabel(this)
 }
 
-/** User-selectable BOOX SDK integration level (Settings → 「BOOX SDK 模式」). */
-enum class BooxSdkMode(val label: String) {
+/** User-selectable BOOX SDK integration level (Settings → BOOX SDK Mode). */
+enum class BooxSdkMode {
     /** Completely bypass Onyx SDK (identical to pre-SDK standard Android `View.invalidate()`). */
-    OFF("关闭 SDK"),
+    OFF,
     /** BOOX EPD partial/fast waveforms only; paint strokes directly in real color without TouchHelper. */
-    EPD_ONLY("仅快刷"),
+    EPD_ONLY,
     /** Full BOOX SDK: EPD waveforms + TouchHelper hardware raw drawing overlay. */
-    FULL("完整（直绘）"),
+    FULL,
+    ;
+
+    fun label(strings: AppStrings = AppI18n.strings()): String = strings.booxSdkModeLabel(this)
 }
 
 /** What the BOOX integration is actually doing on this device (Settings → 「BOOX 墨水屏」). */
@@ -174,22 +182,27 @@ object OnyxEinkBridge {
             else -> EinkSupport.BOOX_EPD
         }
 
-    /** Human-readable status for Settings → 「BOOX 墨水屏」. */
-    val statusText: String
-        get() = when (support) {
-            EinkSupport.NOT_BOOX ->
-                "未检测到 BOOX 设备（${Build.MANUFACTURER.orEmpty()} ${Build.MODEL.orEmpty()}）· 标准 Android 刷新模式"
-            EinkSupport.BOOX_SDK_DISABLED ->
-                "已检测到 BOOX ${Build.MODEL.orEmpty()} · 已关闭 BOOX SDK（标准 Android 刷新模式）"
-            EinkSupport.BOOX_SDK_FAILED ->
-                "检测到 BOOX 设备，但 Onyx SDK 初始化失败（${failure ?: "未初始化"}）· 已降级为标准刷新"
-            EinkSupport.BOOX_EPD_TOUCH_HELPER ->
-                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 + TouchHelper 硬件直绘（$SDK_VERSIONS）"
-            EinkSupport.BOOX_EPD -> {
-                val why = if (sdkMode == BooxSdkMode.EPD_ONLY) "当前为「仅墨水屏快刷」模式" else rawDrawingFailure ?: "未检测到手写笔或非 arm64 设备"
-                "已检测到 BOOX ${Build.MODEL.orEmpty()} ✓ EPD 局部刷新 · 硬件直绘未启用（$why）"
+    /** Human-readable status for Settings → BOOX E-Ink. */
+    fun statusText(strings: AppStrings = AppI18n.strings()): String = when (support) {
+        EinkSupport.NOT_BOOX ->
+            strings.booxStatusNotBoox(Build.MANUFACTURER.orEmpty(), Build.MODEL.orEmpty())
+        EinkSupport.BOOX_SDK_DISABLED ->
+            strings.booxStatusSdkDisabled(Build.MODEL.orEmpty())
+        EinkSupport.BOOX_SDK_FAILED ->
+            strings.booxStatusSdkFailed(failure ?: strings.booxStatusUninitialized)
+        EinkSupport.BOOX_EPD_TOUCH_HELPER ->
+            strings.booxStatusEpdTouchHelper(Build.MODEL.orEmpty(), SDK_VERSIONS)
+        EinkSupport.BOOX_EPD -> {
+            val why = if (sdkMode == BooxSdkMode.EPD_ONLY) {
+                strings.booxStatusEpdOnlyReason
+            } else {
+                rawDrawingFailure ?: strings.booxStatusNoStylusReason
             }
+            strings.booxStatusEpd(Build.MODEL.orEmpty(), why)
         }
+    }
+
+    val statusText: String get() = statusText(AppI18n.strings())
 
     /** Diagnostic line (device class detected by the SDK). */
     val deviceDetail: String? get() = deviceInfo

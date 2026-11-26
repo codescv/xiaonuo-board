@@ -1,11 +1,17 @@
 package dev.xiaonuoboard.app.engine
 
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
+
 enum class Tool { FILL, CRAYON, ERASER }
 
-enum class BrushSize(val label: String, val radius: Float) {
-    THIN("细", CrayonBrush.THIN),
-    MEDIUM("中", CrayonBrush.MEDIUM),
-    THICK("粗", CrayonBrush.THICK),
+enum class BrushSize(val radius: Float) {
+    THIN(CrayonBrush.THIN),
+    MEDIUM(CrayonBrush.MEDIUM),
+    THICK(CrayonBrush.THICK),
+    ;
+
+    fun label(strings: AppStrings = AppI18n.strings()): String = strings.brushSizeLabel(this)
 }
 
 /** Pointer classification independent of android.view.MotionEvent so it is JVM-testable. */

@@ -37,19 +37,24 @@ import dev.xiaonuoboard.app.ai.AiPipeline
 import dev.xiaonuoboard.app.ai.GeminiModels
 import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.DiagLogExporter
+import dev.xiaonuoboard.app.eink.BooxSdkMode
 import dev.xiaonuoboard.app.eink.DiagLog
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
+import dev.xiaonuoboard.app.i18n.AppLanguage
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import dev.xiaonuoboard.app.update.InstallLaunchResult
 import dev.xiaonuoboard.app.update.ReleaseParser
 import dev.xiaonuoboard.app.update.UpdateUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
-/** 家长设置 (parent-locked). */
+/** Parent Settings (parent-locked). */
 @Composable
 fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (String) -> Unit) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by container.settings.settings.collectAsState()
@@ -66,21 +71,23 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
 
     val importDoc = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        importStatus = "正在导入并转换为封闭线稿…"
+        val currentStrings = s
+        importStatus = currentStrings.settingsImportBusy
         scope.launch {
             val page = withContext(Dispatchers.Default) {
                 runCatching {
-                    val bmp = BitmapIO.decodeUri(context, uri) ?: error("无法读取图片")
-                    val out = try { AiPipeline.importLocal(bmp) } finally { bmp.recycle() }
+                    val bmp = BitmapIO.decodeUri(context, uri) ?: error(currentStrings.settingsImportDecodeError)
+                    val out = try { AiPipeline.importLocal(bmp, currentStrings) } finally { bmp.recycle() }
                     try {
-                        container.pages.saveCustomPage("导入 · ${System.currentTimeMillis() % 100000}", out.line, out.ref, "imported", out.regions)
+                        val suffix = (System.currentTimeMillis() % 100000).toString()
+                        container.pages.saveCustomPage(currentStrings.settingsImportTitle(suffix), out.line, out.ref, "imported", out.regions)
                     } finally {
                         out.line.recycle()
                         out.ref?.recycle()
                     }
                 }
             }
-            page.onSuccess { onImported(it.id) }.onFailure { importStatus = "导入失败：${it.message}" }
+            page.onSuccess { onImported(it.id) }.onFailure { importStatus = currentStrings.settingsImportFailed(it.message) }
         }
     }
 
@@ -89,15 +96,35 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            EinkButton("← 返回") { persist(); onBack() }
-            Text("⚙️ 家长设置", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-            Text("v${BuildConfig.VERSION_NAME} · BOOX 优化版", fontSize = 14.sp, color = Eink.Muted)
+            EinkButton(s.backArrow) { persist(); onBack() }
+            Text(s.settingsTitle, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            Text(s.settingsVersionEdition(BuildConfig.VERSION_NAME), fontSize = 14.sp, color = Eink.Muted)
+        }
+
+        // Dedicated top card so non-Chinese parents find language switching immediately.
+        EinkCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(s.settingsLanguageTitle, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                EinkSegmented(
+                    options = listOf(
+                        AppLanguage.SYSTEM to s.languageSystem,
+                        AppLanguage.ZH to "中文",
+                        AppLanguage.EN to "English",
+                        AppLanguage.JA to "日本語",
+                    ),
+                    selected = settings.language,
+                    fontSize = 15,
+                ) { lang ->
+                    container.settings.update { it.copy(language = lang) }
+                }
+                Text(s.settingsLanguageDesc, fontSize = 13.sp, color = Eink.Muted)
+            }
         }
 
         EinkCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Gemini AI 生图配置", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-                Text("API Key（仅保存在本机）", fontWeight = FontWeight.Bold)
+                Text(s.settingsGeminiTitle, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                Text(s.settingsApiKeyLabel, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = apiKey, onValueChange = { apiKey = it }, singleLine = true,
@@ -105,37 +132,38 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         placeholder = { Text("AIza…") }, modifier = Modifier.weight(1f),
                     )
-                    EinkButton(if (showKey) "隐藏" else "显示") { showKey = !showKey }
+                    EinkButton(if (showKey) s.hide else s.show) { showKey = !showKey }
                 }
-                Text("自定义 Base URL 代理（选填）", fontWeight = FontWeight.Bold)
+                Text(s.settingsBaseUrlLabel, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = baseUrl, onValueChange = { baseUrl = it }, singleLine = true,
                     placeholder = { Text(GeminiModels.DEFAULT_BASE_URL) }, modifier = Modifier.fillMaxWidth(),
                 )
-                Text("模型", fontWeight = FontWeight.Bold)
+                Text(s.settingsModelLabel, fontWeight = FontWeight.Bold)
                 GeminiModels.OPTIONS.forEach { opt ->
                     EinkButton(
-                        "${opt.label} · ${opt.id}", Modifier.fillMaxWidth(),
+                        "${opt.label(s)} · ${opt.id}", Modifier.fillMaxWidth(),
                         selected = settings.model == opt.id, fontSize = 15,
                     ) { customModel = ""; container.settings.update { it.copy(model = opt.id) } }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = customModel, onValueChange = { customModel = it }, singleLine = true,
-                        placeholder = { Text("自定义模型名，如 gemini-xxx-image") }, modifier = Modifier.weight(1f),
+                        placeholder = { Text(s.settingsCustomModelPlaceholder) }, modifier = Modifier.weight(1f),
                     )
-                    EinkButton("使用", selected = customModel.isNotBlank() && settings.model == customModel.trim()) {
+                    EinkButton(s.useLabel, selected = customModel.isNotBlank() && settings.model == customModel.trim()) {
                         if (customModel.isNotBlank()) container.settings.update { it.copy(model = customModel.trim()) }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EinkButton("保存", Modifier.weight(1f)) { persist(); testResult = "✓ 已保存" }
-                    EinkButton("测试连通性", Modifier.weight(1f), selected = true) {
+                    EinkButton(s.save, Modifier.weight(1f)) { persist(); testResult = s.settingsSaved }
+                    EinkButton(s.settingsTestConnectivity, Modifier.weight(1f), selected = true) {
                         persist()
-                        testResult = "测试中…"
+                        val currentStrings = s
+                        testResult = currentStrings.settingsTesting
                         scope.launch {
                             testResult = withContext(Dispatchers.IO) {
-                                runCatching { container.gemini.testConnectivity() }.getOrElse { "✗ ${it.message}" }
+                                runCatching { container.gemini.testConnectivity(currentStrings) }.getOrElse { "✗ ${it.message}" }
                             }
                         }
                     }
@@ -146,39 +174,38 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
 
         EinkCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("BOOX 墨水屏、交互与诊断", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                Text(s.settingsBooxCardTitle, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
                 // Real runtime state: BOOX hardware? SDK initialized? TouchHelper raw pen armed?
-                // Keying off settings.booxSdkMode ensures statusText recomposes immediately on toggle.
-                val booxStatus = remember(settings.booxSdkMode) { OnyxEinkBridge.statusText }
+                // Keying off settings.booxSdkMode & s.language ensures statusText recomposes immediately.
+                val booxStatus = remember(settings.booxSdkMode, s.language) { OnyxEinkBridge.statusText(s) }
                 Text(booxStatus, fontSize = 14.sp, color = Eink.Muted)
-                OnyxEinkBridge.deviceDetail?.let { Text("Onyx 设备：$it", fontSize = 12.sp, color = Eink.Muted) }
-                Text("BOOX SDK 模式", fontWeight = FontWeight.Bold)
+                OnyxEinkBridge.deviceDetail?.let { Text(s.settingsOnyxDevice(it), fontSize = 12.sp, color = Eink.Muted) }
+                Text(s.settingsBooxSdkModeTitle, fontWeight = FontWeight.Bold)
                 EinkSegmented(
                     listOf(
-                        dev.xiaonuoboard.app.eink.BooxSdkMode.OFF to "关闭 SDK（标准）",
-                        dev.xiaonuoboard.app.eink.BooxSdkMode.EPD_ONLY to "仅墨水屏快刷",
-                        dev.xiaonuoboard.app.eink.BooxSdkMode.FULL to "完整（直绘）",
+                        BooxSdkMode.OFF to s.settingsBooxSdkOff,
+                        BooxSdkMode.EPD_ONLY to s.settingsBooxSdkEpdOnly,
+                        BooxSdkMode.FULL to s.settingsBooxSdkFull,
                     ),
                     settings.booxSdkMode,
+                    fontSize = 15,
                 ) { mode ->
                     OnyxEinkBridge.setSdkMode(mode)
                     container.settings.update { it.copy(booxSdkMode = mode) }
                 }
-                Text(
-                    "「关闭 SDK」与未集成 SDK 时完全一致；「仅墨水屏快刷」实时显示真实颜色并保留不涂出线；「完整（直绘）」启用硬件手写层。",
-                    fontSize = 12.sp, color = Eink.Muted,
-                )
-                Text("默认刷新模式", fontWeight = FontWeight.Bold)
+                Text(s.settingsBooxSdkDesc, fontSize = 12.sp, color = Eink.Muted)
+                Text(s.settingsRefreshModeTitle, fontWeight = FontWeight.Bold)
                 EinkSegmented(
-                    listOf(EinkMode.REGAL to "REGAL 清晰（推荐）", EinkMode.NORMAL to "标准", EinkMode.FAST to "快速"),
+                    listOf(EinkMode.REGAL to s.settingsRefreshRegalRec, EinkMode.NORMAL to s.einkModeNormal, EinkMode.FAST to s.einkModeFast),
                     settings.einkMode,
+                    fontSize = 15,
                 ) { m -> container.settings.update { it.copy(einkMode = m) } }
-                Text("涂色音效与完成夸奖", fontWeight = FontWeight.Bold)
-                EinkSegmented(listOf(false to "静音（默认）", true to "轻柔音效"), settings.soundEnabled) { on ->
+                Text(s.settingsSoundTitle, fontWeight = FontWeight.Bold)
+                EinkSegmented(listOf(false to s.settingsSoundOff, true to s.settingsSoundOn), settings.soundEnabled) { on ->
                     container.settings.update { it.copy(soundEnabled = on) }
                 }
-                Text("防误触", fontWeight = FontWeight.Bold)
-                EinkSegmented(listOf(false to "👆 手笔皆可", true to "✍️ 仅笔作画"), settings.stylusOnly) { on ->
+                Text(s.settingsPalmRejectionTitle, fontWeight = FontWeight.Bold)
+                EinkSegmented(listOf(false to s.settingsInputBoth, true to s.settingsInputStylusOnly), settings.stylusOnly) { on ->
                     container.settings.update { it.copy(stylusOnly = on) }
                 }
                 DiagnosticsSection(container)
@@ -187,9 +214,9 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
 
         EinkCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("本地导入", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-                Text("从相册 / 文件选择线稿图片，自动二值化、去噪并封口，加入「AI 魔法」图库。", fontSize = 14.sp, color = Eink.Muted)
-                EinkButton("📂 从本地相册 / 文件导入", Modifier.fillMaxWidth()) { importDoc.launch(arrayOf("image/*")) }
+                Text(s.settingsImportTitle, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                Text(s.settingsImportDesc, fontSize = 14.sp, color = Eink.Muted)
+                EinkButton(s.settingsImportButton, Modifier.fillMaxWidth()) { importDoc.launch(arrayOf("image/*")) }
                 importStatus?.let { Text(it, fontWeight = FontWeight.Bold) }
             }
         }
@@ -198,44 +225,52 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit, onImported: (Str
     }
 }
 
-/** 诊断：export / share the [DiagLog] ring buffer (pen latency, refreshes, TouchHelper state). */
+/** Diagnostics: export / share the [DiagLog] ring buffer (pen latency, refreshes, TouchHelper state). */
 @Composable
 private fun DiagnosticsSection(container: AppContainer) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    Text("诊断", fontWeight = FontWeight.Bold)
+    Text(s.settingsDiagTitle, fontWeight = FontWeight.Bold)
     Text(
-        "记录笔迹延迟、刷新与 BOOX 手写层状态（最近 ${DiagLog.capacity} 条，当前 ${DiagLog.count} 条，不含画作内容）。" +
-            "遇到卡顿时先画几笔，再导出日志发给开发者。",
+        s.settingsDiagDesc(DiagLog.capacity, DiagLog.count),
         fontSize = 14.sp, color = Eink.Muted,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        EinkButton("导出诊断日志", Modifier.weight(1f), enabled = !busy) {
+        EinkButton(s.settingsDiagExport, Modifier.weight(1f), enabled = !busy) {
             busy = true
-            status = "正在导出…"
+            val currentStrings = s
+            status = currentStrings.settingsDiagExporting
             val snapshot = container.settings.current
             scope.launch {
                 status = withContext(Dispatchers.IO) {
-                    runCatching { DiagLogExporter.saveToDownloads(context, snapshot) }
-                        .fold({ "✓ 已保存 ${it.entries} 条日志到 ${it.location}" }, { "✗ 导出失败：${it.message}" })
+                    runCatching { DiagLogExporter.saveToDownloads(context, snapshot, currentStrings) }
+                        .fold(
+                            { currentStrings.settingsDiagExportOk(it.entries, it.location) },
+                            { currentStrings.settingsDiagExportFailed(it.message) },
+                        )
                 }
                 busy = false
             }
         }
-        EinkButton("分享日志", Modifier.weight(1f), enabled = !busy) {
+        EinkButton(s.settingsDiagShare, Modifier.weight(1f), enabled = !busy) {
             busy = true
+            val currentStrings = s
             val snapshot = container.settings.current
             scope.launch {
-                val shared = withContext(Dispatchers.IO) { runCatching { DiagLogExporter.shareIntent(context, snapshot) } }
+                val shared = withContext(Dispatchers.IO) { runCatching { DiagLogExporter.shareIntent(context, snapshot, currentStrings) } }
                 status = shared.fold(
                     { (intent, res) ->
                         runCatching { context.startActivity(intent) }
-                            .fold({ "已打开分享（${res.entries} 条 · ${res.location}）" }, { "✗ 无法分享：${it.message}" })
+                            .fold(
+                                { currentStrings.settingsDiagShareOk(res.entries, res.location) },
+                                { currentStrings.settingsDiagShareLaunchFailed(it.message) },
+                            )
                     },
-                    { "✗ 分享失败：${it.message}" },
+                    { currentStrings.settingsDiagShareFailed(it.message) },
                 )
                 busy = false
             }
@@ -246,15 +281,16 @@ private fun DiagnosticsSection(container: AppContainer) {
 
 @Composable
 private fun OtaUpdateCard(container: AppContainer) {
+    val str = LocalAppStrings.current
     val context = LocalContext.current
     val state by container.updater.state.collectAsState()
     var installHint by remember { mutableStateOf<String?>(null) }
 
     fun triggerInstall() {
         when (val res = container.updater.launchInstaller(context)) {
-            InstallLaunchResult.Launched -> installHint = "已拉起系统安装器"
+            InstallLaunchResult.Launched -> installHint = str.otaInstallerLaunched
             is InstallLaunchResult.NeedsUnknownSourcesPermission -> {
-                installHint = "请允许「安装未知应用」权限，返回后将自动安装"
+                installHint = str.otaUnknownSourcesHint
                 runCatching { context.startActivity(res.settingsIntent) }
             }
             is InstallLaunchResult.Failed -> installHint = res.message
@@ -268,69 +304,69 @@ private fun OtaUpdateCard(container: AppContainer) {
     EinkCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("软件更新（GitHub OTA）", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                Text("当前 v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Eink.Muted)
+                Text(str.otaTitle, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                Text(str.otaCurrentVersion(BuildConfig.VERSION_NAME), fontSize = 14.sp, color = Eink.Muted)
             }
             when (val s = state) {
                 UpdateUiState.Idle -> {
-                    Text("自动检测 GitHub Releases 新版本，支持 SHA-256 与签名校验后一键安装。", fontSize = 14.sp, color = Eink.Muted)
-                    EinkButton("🔄 检查更新", Modifier.fillMaxWidth()) {
+                    Text(str.otaIdleDesc, fontSize = 14.sp, color = Eink.Muted)
+                    EinkButton(str.otaCheckButton, Modifier.fillMaxWidth()) {
                         installHint = null
                         container.updater.check(force = true)
                     }
                 }
                 UpdateUiState.Checking -> {
-                    Text("正在连接 GitHub 检查新版本…", fontWeight = FontWeight.Bold)
-                    EinkButton("取消", Modifier.fillMaxWidth()) { container.updater.cancel() }
+                    Text(str.otaChecking, fontWeight = FontWeight.Bold)
+                    EinkButton(str.cancel, Modifier.fillMaxWidth()) { container.updater.cancel() }
                 }
                 is UpdateUiState.UpToDate -> {
-                    Text("✓ 已是最新版本（v${BuildConfig.VERSION_NAME}）", fontWeight = FontWeight.Bold)
-                    EinkButton("🔄 重新检查", Modifier.fillMaxWidth()) {
+                    Text(str.otaUpToDate(BuildConfig.VERSION_NAME), fontWeight = FontWeight.Bold)
+                    EinkButton(str.otaRecheckButton, Modifier.fillMaxWidth()) {
                         installHint = null
                         container.updater.check(force = true)
                     }
                 }
                 is UpdateUiState.Available -> {
-                    val sizeMb = if (s.asset.size > 0) " · %.1f MB".format(s.asset.size / (1024.0 * 1024.0)) else ""
-                    Text("🎉 发现新版本：${s.release.tagName}$sizeMb", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    val sizeMb = if (s.asset.size > 0) String.format(Locale.US, " · %.1f MB", s.asset.size / (1024.0 * 1024.0)) else ""
+                    Text(str.otaAvailable(s.release.tagName, sizeMb), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
                     s.release.body?.trim()?.takeIf { it.isNotEmpty() }?.let { notes ->
                         Text(notes.take(240), fontSize = 14.sp, color = Eink.Muted)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EinkButton("⬇️ 下载并安装", Modifier.weight(1f), selected = true) {
+                        EinkButton(str.otaDownloadInstallButton, Modifier.weight(1f), selected = true) {
                             installHint = null
                             container.updater.download { triggerInstall() }
                         }
-                        EinkButton("🌐 发布页") {
+                        EinkButton(str.otaReleasePageButton) {
                             openReleasePage(s.release.htmlUrl ?: ReleaseParser.DEFAULT_RELEASE_HTML_URL)
                         }
                     }
                 }
                 is UpdateUiState.Downloading -> {
-                    val pct = if (s.totalBytes > 0) ((s.downloadedBytes * 100) / s.totalBytes).coerceIn(0, 100) else -1
-                    val dlMb = "%.1f".format(s.downloadedBytes / (1024.0 * 1024.0))
-                    val totMb = if (s.totalBytes > 0) "/ %.1f MB".format(s.totalBytes / (1024.0 * 1024.0)) else "MB"
-                    val spd = if (s.speedBytesPerSec > 0) " · %.0f KB/s".format(s.speedBytesPerSec / 1024.0) else ""
+                    val pct = if (s.totalBytes > 0) ((s.downloadedBytes * 100) / s.totalBytes).coerceIn(0, 100).toInt() else -1
+                    val dlMb = String.format(Locale.US, "%.1f", s.downloadedBytes / (1024.0 * 1024.0))
+                    val totMb = if (s.totalBytes > 0) String.format(Locale.US, "/ %.1f MB", s.totalBytes / (1024.0 * 1024.0)) else "MB"
+                    val spd = if (s.speedBytesPerSec > 0) String.format(Locale.US, " · %.0f KB/s", s.speedBytesPerSec / 1024.0) else ""
                     Text(
-                        if (pct >= 0) "正在下载 ${s.release.tagName}：$pct%（$dlMb $totMb$spd）"
-                        else "正在下载 ${s.release.tagName}：$dlMb $totMb$spd",
+                        if (pct >= 0) str.otaDownloadingPct(s.release.tagName, pct, dlMb, totMb, spd)
+                        else str.otaDownloadingNoPct(s.release.tagName, dlMb, totMb, spd),
                         fontWeight = FontWeight.Bold,
                     )
-                    EinkButton("取消下载", Modifier.fillMaxWidth()) { container.updater.cancel() }
+                    EinkButton(str.otaCancelDownloadButton, Modifier.fillMaxWidth()) { container.updater.cancel() }
                 }
                 is UpdateUiState.Verifying -> {
-                    Text("正在校验安装包完整性与签名…", fontWeight = FontWeight.Bold)
+                    Text(str.otaVerifying, fontWeight = FontWeight.Bold)
                 }
                 is UpdateUiState.Ready -> {
-                    Text("✓ ${s.release.tagName} 已下载并通过签名校验", fontWeight = FontWeight.Bold)
-                    EinkButton("📦 立即安装 ${s.release.tagName}", Modifier.fillMaxWidth(), selected = true) {
+                    Text(str.otaReady(s.release.tagName), fontWeight = FontWeight.Bold)
+                    EinkButton(str.otaInstallNow(s.release.tagName), Modifier.fillMaxWidth(), selected = true) {
                         triggerInstall()
                     }
                 }
                 is UpdateUiState.Error -> {
                     Text("✗ ${s.message}", fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EinkButton("🔄 重试", Modifier.weight(1f)) {
+                        EinkButton(str.otaRetryButton, Modifier.weight(1f)) {
                             installHint = null
                             container.updater.check(force = true)
                         }

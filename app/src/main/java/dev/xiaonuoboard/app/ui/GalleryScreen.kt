@@ -32,12 +32,12 @@ import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.data.Artwork
 import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.GalleryExporter
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 @Composable
 fun GalleryScreen(
@@ -46,13 +46,14 @@ fun GalleryScreen(
     onContinue: (Artwork) -> Unit,
     onFreshCopy: (String) -> Unit,
 ) {
+    val s = LocalAppStrings.current
     val works by container.artworks.works.collectAsState()
     var pageIndex by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            EinkIconTextButton("返回", leading = { tint -> KidIcons.BackArrow(tint, Modifier.size(28.dp)) }) { onBack() }
+            EinkIconTextButton(s.back, leading = { tint -> KidIcons.BackArrow(tint, Modifier.size(28.dp)) }) { onBack() }
             KidIcons.GalleryFrame(Eink.Ink, Modifier.size(32.dp))
-            Text("我的作品画廊（${works.size} 幅）", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            Text(s.galleryTitle(works.size), fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
         }
         val pageCount = maxOf(1, (works.size + 3) / 4)
         val current = pageIndex.coerceIn(0, pageCount - 1)
@@ -73,7 +74,7 @@ fun GalleryScreen(
     }
 }
 
-/** Gallery card: thumbnail, title #copy, status, 继续涂 / 新开重涂 / 导出PNG / 删除. */
+/** Gallery card: thumbnail, title #copy, status, continue / fresh copy / export PNG / delete. */
 @Composable
 fun ArtworkCard(
     container: AppContainer,
@@ -82,11 +83,16 @@ fun ArtworkCard(
     onOpen: () -> Unit,
     onFresh: () -> Unit,
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var message by remember(art.id) { mutableStateOf<String?>(null) }
     var confirmDelete by remember(art.id) { mutableStateOf(false) }
-    val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.CHINA) }
+    val fmt = remember(s.language) { SimpleDateFormat(s.galleryDatePattern, s.language.toLocale()) }
+    // Built-in page titles localize dynamically; user-saved AI/imported artwork titles remain as created.
+    val displayTitle = remember(art.pageId, art.pageTitle, s.language) {
+        container.pages.findBuiltinPage(art.pageId)?.localizedTitle(s.language) ?: art.pageTitle
+    }
 
     Column(
         modifier.background(Eink.White, Eink.Shape).border(Eink.Border, Eink.Ink, Eink.Shape).padding(8.dp),
@@ -95,42 +101,43 @@ fun ArtworkCard(
         Box(Modifier.weight(1f).fillMaxWidth().einkClick(onClick = onOpen)) {
             FileThumb(container.artworks.thumbFile(art.id), art.updatedAt, Modifier.fillMaxSize())
             if (art.completed) {
-                StarBadge("已完成", Modifier.align(Alignment.TopStart), fontSize = 13)
+                StarBadge(s.badgeCompleted, Modifier.align(Alignment.TopStart), fontSize = 13)
             } else {
                 Box(Modifier.align(Alignment.TopStart).background(Eink.Ink, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                    Text("涂色中 ${(art.progress * 100).toInt()}%", color = Eink.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(s.galleryInProgress((art.progress * 100).toInt()), color = Eink.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
-        Text("${art.pageTitle} #${art.copyNo}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("$displayTitle #${art.copyNo}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
-            message ?: (fmt.format(Date(art.updatedAt)) + if (art.exported) " · 已导出相册" else " · 自动保存"),
+            message ?: (fmt.format(Date(art.updatedAt)) + if (art.exported) s.galleryStatusExported else s.galleryStatusAutosaved),
             fontSize = 13.sp, color = Eink.Muted, maxLines = 1,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            EinkButton("继续涂", modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) { onOpen() }
-            EinkButton("新开重涂", modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) { onFresh() }
+            EinkButton(s.galleryContinue, modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) { onOpen() }
+            EinkButton(s.galleryFreshCopy, modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) { onFresh() }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            EinkButton("导出PNG", modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) {
+            EinkButton(s.galleryExportPng, modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) {
+                val currentStrings = s
                 scope.launch {
-                    message = "导出中…"
+                    message = currentStrings.galleryExporting
                     message = withContext(Dispatchers.IO) {
                         var bmp: Bitmap? = null
                         try {
-                            bmp = renderArtwork(container, art) ?: error("作品文件缺失")
-                            val where = GalleryExporter.exportPng(context, bmp, "${art.pageTitle}_${art.copyNo}_${art.updatedAt}")
+                            bmp = renderArtwork(container, art) ?: error(currentStrings.galleryMissingFile)
+                            val where = GalleryExporter.exportPng(context, bmp, "${displayTitle}_${art.copyNo}_${art.updatedAt}", currentStrings)
                             container.artworks.markExported(art.id)
-                            "已导出：$where"
+                            currentStrings.galleryExported(where)
                         } catch (e: Exception) {
-                            "导出失败：${e.message}"
+                            currentStrings.exportFailed(e.message)
                         } finally {
                             bmp?.recycle()
                         }
                     }
                 }
             }
-            EinkButton(if (confirmDelete) "确认删除?" else "删除", selected = confirmDelete, modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) {
+            EinkButton(if (confirmDelete) s.galleryConfirmDelete else s.delete, selected = confirmDelete, modifier = Modifier.weight(1f), fontSize = 14, minHeight = 48.dp) {
                 if (confirmDelete) {
                     container.artworks.delete(art.id)
                     ThumbCache.invalidate("file:${container.artworks.thumbFile(art.id).absolutePath}")

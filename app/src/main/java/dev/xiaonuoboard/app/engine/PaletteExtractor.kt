@@ -1,5 +1,8 @@
 package dev.xiaonuoboard.app.engine
 
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
+
 /**
  * Extracts the dominant "recommended" crayon colors from a reference (colored) image.
  *
@@ -70,24 +73,26 @@ object PaletteExtractor {
 
 /** Kaleido Plus–tuned 16-color high-saturation crayon palette (design spec §3.4). */
 object KaleidoPalette {
-    data class Crayon(val name: String, val argb: Int)
+    data class Crayon(val id: String, val argb: Int) {
+        fun name(strings: AppStrings = AppI18n.strings()): String = strings.crayonName(id)
+    }
 
     val CRAYONS: List<Crayon> = listOf(
-        Crayon("中国红", 0xFFE61919.toInt()),
-        Crayon("活力橙", 0xFFFF6F00.toInt()),
-        Crayon("柠檬黄", 0xFFFFD600.toInt()),
-        Crayon("苹果绿", 0xFF38B000.toInt()),
-        Crayon("森林绿", 0xFF007F5F.toInt()),
-        Crayon("天青蓝", 0xFF00B4D8.toInt()),
-        Crayon("冰雪蓝", 0xFF0077B6.toInt()),
-        Crayon("宝蓝", 0xFF2400FF.toInt()),
-        Crayon("薰衣草紫", 0xFF9D4EDD.toInt()),
-        Crayon("玫红", 0xFFFF006E.toInt()),
-        Crayon("佩奇粉", 0xFFFF70A6.toInt()),
-        Crayon("蜜桃肤", 0xFFFFB58A.toInt()),
-        Crayon("焦糖棕", 0xFFA45A2A.toInt()),
-        Crayon("暖灰", 0xFF8D99AE.toInt()),
-        Crayon("纯黑", 0xFF111111.toInt()),
-        Crayon("橡皮白", 0xFFFFFFFF.toInt()),
+        Crayon("red", 0xFFE61919.toInt()),
+        Crayon("orange", 0xFFFF6F00.toInt()),
+        Crayon("yellow", 0xFFFFD600.toInt()),
+        Crayon("apple_green", 0xFF38B000.toInt()),
+        Crayon("forest_green", 0xFF007F5F.toInt()),
+        Crayon("sky_blue", 0xFF00B4D8.toInt()),
+        Crayon("ice_blue", 0xFF0077B6.toInt()),
+        Crayon("royal_blue", 0xFF2400FF.toInt()),
+        Crayon("lavender", 0xFF9D4EDD.toInt()),
+        Crayon("magenta", 0xFFFF006E.toInt()),
+        Crayon("peppa_pink", 0xFFFF70A6.toInt()),
+        Crayon("peach", 0xFFFFB58A.toInt()),
+        Crayon("caramel", 0xFFA45A2A.toInt()),
+        Crayon("warm_gray", 0xFF8D99AE.toInt()),
+        Crayon("black", 0xFF111111.toInt()),
+        Crayon("white", 0xFFFFFFFF.toInt()),
     )
 }

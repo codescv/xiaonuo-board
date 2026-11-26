@@ -1,5 +1,6 @@
 package dev.xiaonuoboard.app.update
 
+import dev.xiaonuoboard.app.i18n.AppI18n
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -559,13 +560,13 @@ class AppUpdater(
         return when (e) {
             is SocketTimeoutException -> UpdateException(UpdateErrorCode.TIMEOUT, "Request timed out ($timeoutMs ms)", e)
             is UnknownServiceException -> UpdateException(UpdateErrorCode.INSECURE_URL, "Cleartext HTTP not permitted", e)
-            is UnknownHostException -> UpdateException(UpdateErrorCode.NETWORK, "无法连接 GitHub（请检查网络）", e)
+            is UnknownHostException -> UpdateException(UpdateErrorCode.NETWORK, AppI18n.strings().updateErrCannotReachGithub, e)
             is IOException -> UpdateException(UpdateErrorCode.NETWORK, e.message ?: "Network error", e)
             else -> UpdateException(UpdateErrorCode.NETWORK, "${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 
-    private fun cancelled() = UpdateException(UpdateErrorCode.CANCELLED, "已取消更新")
+    private fun cancelled() = UpdateException(UpdateErrorCode.CANCELLED, AppI18n.strings().updateErrCancelled)
 
     private fun userAgent(version: String?): String {
         val clean = version?.trim()?.replace(Regex("[^0-9A-Za-z._-]"), "")?.takeIf { it.isNotEmpty() }

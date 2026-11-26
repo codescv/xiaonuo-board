@@ -10,6 +10,8 @@ import androidx.core.content.FileProvider
 import dev.xiaonuoboard.app.BuildConfig
 import dev.xiaonuoboard.app.eink.DiagLog
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,7 +19,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Settings → 「导出诊断日志」 / 「分享日志」: writes the [DiagLog] ring buffer plus a device / app /
+ * Settings → Export / Share Diagnostic Log: writes the [DiagLog] ring buffer plus a device / app /
  * BOOX status header as a plain-text file. No new permissions: MediaStore.Downloads on API 29+,
  * the app-specific external Downloads dir on API 26–28, and the existing FileProvider for sharing.
  */
@@ -36,7 +38,7 @@ object DiagLogExporter {
     /** Full report text: header (app, device, BOOX, canvas, settings) + all buffered entries. */
     fun buildReport(settings: AppSettings, nowMillis: Long = System.currentTimeMillis()): String = buildString {
         val wall = SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(Date(nowMillis))
-        append("=== 小诺画板 XiaonuoBoard diagnostic log ===\n")
+        append("=== XiaonuoBoard diagnostic log ===\n")
         append("exported: ").append(wall).append(" | monotonicNow=").append(DiagLog.nowMs()).append("ms\n")
         append("app: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(") ")
             .append(BuildConfig.BUILD_TYPE).append('\n')
@@ -46,7 +48,8 @@ object DiagLogExporter {
         append("android: sdk=").append(Build.VERSION.SDK_INT).append(" release=").append(Build.VERSION.RELEASE)
             .append(" abis=").append(Build.SUPPORTED_ABIS.orEmpty().joinToString(",")).append('\n')
         append("boox: ").append(OnyxEinkBridge.diagSummary()).append('\n')
-        append("settings: einkMode=").append(settings.einkMode.name)
+        append("settings: language=").append(settings.language.storageKey)
+            .append(" einkMode=").append(settings.einkMode.name)
             .append(" booxSdkMode=").append(settings.booxSdkMode.name)
             .append(" stylusOnly=").append(settings.stylusOnly)
             .append(" stayInsideLines=").append(settings.stayInsideLines).append(" ghostUnderlay=").append(settings.ghostUnderlay)
@@ -63,7 +66,7 @@ object DiagLogExporter {
     }
 
     /** Saves the report to `Download/XiaonuoBoard/` (or the app's external Downloads dir on API < 29). */
-    fun saveToDownloads(context: Context, settings: AppSettings): Result {
+    fun saveToDownloads(context: Context, settings: AppSettings, strings: AppStrings = AppI18n.strings()): Result {
         val now = System.currentTimeMillis()
         val name = fileName(now)
         val bytes = buildReport(settings, now).toByteArray(Charsets.UTF_8)
@@ -77,9 +80,9 @@ object DiagLogExporter {
             }
             val resolver = context.contentResolver
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: throw IllegalStateException("无法创建下载文件")
+                ?: throw IllegalStateException(strings.diagCreateFileFailed)
             try {
-                resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IllegalStateException("无法写入下载目录")
+                resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IllegalStateException(strings.diagWriteFailed)
                 values.clear()
                 values.put(MediaStore.Downloads.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)
@@ -98,7 +101,7 @@ object DiagLogExporter {
     }
 
     /** Writes the report into the cache and returns a chooser for `ACTION_SEND` (text/plain). */
-    fun shareIntent(context: Context, settings: AppSettings): Pair<Intent, Result> {
+    fun shareIntent(context: Context, settings: AppSettings, strings: AppStrings = AppI18n.strings()): Pair<Intent, Result> {
         val now = System.currentTimeMillis()
         val dir = File(context.cacheDir, "diag").apply { mkdirs() }
         // Keep only the latest shared copy.
@@ -112,7 +115,7 @@ object DiagLogExporter {
             putExtra(Intent.EXTRA_SUBJECT, file.name)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val chooser = Intent.createChooser(send, "分享诊断日志").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val chooser = Intent.createChooser(send, strings.diagShareChooserTitle).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return chooser to Result(file.name, DiagLog.count)
     }
 }

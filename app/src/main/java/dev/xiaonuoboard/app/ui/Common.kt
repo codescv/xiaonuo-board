@@ -38,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.ParentGate
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -103,11 +104,12 @@ private fun ThumbImage(bmp: Bitmap?, modifier: Modifier) {
 }
 
 /**
- * 家长锁: answer a single-digit multiplication, or press-and-hold the lock area for 2 seconds.
+ * Parent lock: answer a single-digit multiplication, or press-and-hold the lock area for 2 seconds.
  * Big on-screen number pad (no soft keyboard → no E-Ink keyboard flashing).
  */
 @Composable
 fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
+    val s = LocalAppStrings.current
     val gate = remember { ParentGate() }
     var question by remember { mutableStateOf(gate.current) }
     var input by remember { mutableStateOf("") }
@@ -125,33 +127,34 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 KidIcons.ParentLock(Eink.Ink, Modifier.size(30.dp))
-                Text("家长验证", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text(s.parentGateTitle, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
             }
-            Text("请回答：${question.text}", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text(s.parentGatePrompt(question.text), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Box(
                 Modifier.fillMaxWidth().height(60.dp).border(Eink.Border, Eink.Ink, Eink.Shape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(if (input.isEmpty()) " " else input, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
             }
-            if (error) Text("答错啦，换一道题～", color = Eink.Ink, fontSize = 16.sp)
-            val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", "确定"))
+            if (error) Text(s.parentGateWrong, color = Eink.Ink, fontSize = 16.sp)
+            val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("BS", "0", "OK"))
             rows.forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { key ->
                         val onKey: () -> Unit = {
                             when (key) {
-                                "⌫" -> input = input.dropLast(1)
-                                "确定" -> if (gate.check(input)) onUnlocked() else {
+                                "BS" -> input = input.dropLast(1)
+                                "OK" -> if (gate.check(input)) onUnlocked() else {
                                     error = true; input = ""; question = gate.current
                                 }
                                 else -> if (input.length < 3) input += key
                             }
                         }
-                        if (key == "⌫") {
+                        if (key == "BS") {
                             EinkIconButton(Modifier.weight(1f), onClick = onKey) { tint -> KidIcons.Backspace(tint, Modifier.size(34.dp)) }
                         } else {
-                            EinkButton(key, modifier = Modifier.weight(1f), selected = key == "确定", fontSize = 22, onClick = onKey)
+                            val label = if (key == "OK") s.ok else key
+                            EinkButton(label, modifier = Modifier.weight(1f), selected = key == "OK", fontSize = 22, onClick = onKey)
                         }
                     }
                 }
@@ -171,9 +174,9 @@ fun ParentGateDialog(onDismiss: () -> Unit, onUnlocked: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("或 长按此处 2 秒", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(s.parentGateLongPress, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
-            EinkButton("取消", modifier = Modifier.fillMaxWidth()) { onDismiss() }
+            EinkButton(s.cancel, modifier = Modifier.fillMaxWidth()) { onDismiss() }
         }
     }
 }

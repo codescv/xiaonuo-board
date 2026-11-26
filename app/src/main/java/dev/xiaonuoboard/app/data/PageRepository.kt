@@ -40,6 +40,9 @@ class PageRepository(private val context: Context) {
                 id = p.id,
                 category = p.category,
                 title = p.title,
+                titleZh = p.titleZh.ifBlank { p.title },
+                titleEn = p.titleEn.ifBlank { p.title },
+                titleJa = p.titleJa.ifBlank { p.title },
                 difficulty = p.difficulty,
                 linePath = p.line,
                 refPath = p.ref,
@@ -76,8 +79,11 @@ class PageRepository(private val context: Context) {
         }.sortedByDescending { it.first }.map { it.second }
     }
 
+    fun findBuiltinPage(id: String): ColoringPage? =
+        builtinPages.firstOrNull { it.id == id }
+
     fun findPage(id: String): ColoringPage? =
-        builtinPages.firstOrNull { it.id == id } ?: customPages().firstOrNull { it.id == id }
+        findBuiltinPage(id) ?: customPages().firstOrNull { it.id == id }
 
     /** Persists a new custom page (AI result or local import). Bitmaps must already be 1200×1600. */
     fun saveCustomPage(title: String, line: Bitmap, ref: Bitmap?, source: String, regions: Int): ColoringPage {

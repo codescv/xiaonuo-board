@@ -36,16 +36,27 @@ import dev.xiaonuoboard.app.AppContainer
 import dev.xiaonuoboard.app.ai.AiPipeline
 import dev.xiaonuoboard.app.ai.PromptBuilder
 import dev.xiaonuoboard.app.data.BitmapIO
+import dev.xiaonuoboard.app.i18n.AppStrings
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class AiTab(val label: String) { COMBO("🧩 快捷组合"), FREE("⌨️ 自由输入"), PHOTO("📷 照片转线稿") }
+private enum class AiTab {
+    COMBO, FREE, PHOTO;
 
-/** AI 魔法画坊 (parent-locked): quick combos / alphabet letters / free text / photo → line art. */
+    fun label(s: AppStrings): String = when (this) {
+        COMBO -> s.aiTabCombo
+        FREE -> s.aiTabFree
+        PHOTO -> s.aiTabPhoto
+    }
+}
+
+/** AI Magic Studio (parent-locked): quick combos / alphabet letters / free text / photo → line art. */
 @Composable
 fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (String) -> Unit) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(AiTab.COMBO) }
@@ -88,39 +99,46 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
     }
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            photo = withContext(Dispatchers.IO) { BitmapIO.decodeUri(context, uri, maxDim = 1600) }
-            if (photo == null) status = "无法读取这张照片"
+        if (uri != null) {
+            val currentStrings = s
+            scope.launch {
+                photo = withContext(Dispatchers.IO) { BitmapIO.decodeUri(context, uri, maxDim = 1600) }
+                if (photo == null) status = currentStrings.aiPhotoReadError
+            }
         }
     }
 
     fun generate() {
+        val currentStrings = s
         val apiKeyMissing = container.settings.current.apiKey.isBlank()
-        if (apiKeyMissing) { status = "请先在 ⚙️ 家长设置 中填写 Gemini API Key"; return }
+        if (apiKeyMissing) { status = currentStrings.aiNeedApiKey; return }
         val (prompt, title) = when (tab) {
             AiTab.COMBO -> if (comboAlphabet) {
                 val ch = 'A' + letter
-                PromptBuilder.alphabet(ch, PromptBuilder.ALPHABET_OBJECTS[letter], difficulty) to "AI · 字母 $ch${ch.lowercaseChar()}"
+                // Model prompt MUST stay English (PromptBuilder.ALPHABET_OBJECTS); title is localized.
+                PromptBuilder.alphabet(ch, PromptBuilder.ALPHABET_OBJECTS[letter], difficulty) to
+                    currentStrings.aiTitleAlphabet(ch)
             } else {
                 val c = PromptBuilder.CHARACTERS[character]
                 val sc = PromptBuilder.SCENES[scene]
-                PromptBuilder.combo(c, sc, difficulty) to "AI · ${c.label}${sc.label}"
+                PromptBuilder.combo(c, sc, difficulty) to
+                    currentStrings.aiTitleCombo(c.label(currentStrings), sc.label(currentStrings))
             }
             AiTab.FREE -> {
-                if (freeText.isBlank()) { status = "请先输入想画的内容"; return }
-                PromptBuilder.freeText(freeText, difficulty) to "AI · ${freeText.take(10)}"
+                if (freeText.isBlank()) { status = currentStrings.aiNeedFreeText; return }
+                PromptBuilder.freeText(freeText, difficulty) to currentStrings.aiTitleFree(freeText.take(10))
             }
             AiTab.PHOTO -> {
-                if (photo == null) { status = "请先选择一张照片"; return }
-                PromptBuilder.photoToLineArt(difficulty) to "AI · 照片线稿"
+                if (photo == null) { status = currentStrings.aiNeedPhoto; return }
+                PromptBuilder.photoToLineArt(difficulty) to currentStrings.aiTitlePhoto
             }
         }
-        busy = true; result = null; status = "准备中…"
+        busy = true; result = null; status = currentStrings.aiPreparing
         val input = if (tab == AiTab.PHOTO) photo else null
         // Runs on the app scope (tracked) so a Back press never recycles `input` mid-request.
         val job = container.appScope.async {
             val r = runCatching {
-                container.aiPipeline.run(prompt, input) { _, msg -> scope.launch { status = msg } }
+                container.aiPipeline.run(prompt, input, strings = currentStrings) { _, msg -> scope.launch { status = msg } }
             }
             if (disposed.get()) r.getOrNull()?.let { it.line.recycle(); it.ref?.recycle() }
             r
@@ -131,8 +149,8 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
             busy = false
             out.onSuccess {
                 result = it; resultTitle = title
-                status = (if (it.qcPassed) "✓ 已通过封闭连通域质检 · " else "⚠️ 质检提示：区域数量偏离预期 · ") + it.note
-            }.onFailure { status = "生成失败：${it.message}" }
+                status = (if (it.qcPassed) currentStrings.aiQcPassedPrefix else currentStrings.aiQcWarningPrefix) + it.note
+            }.onFailure { status = currentStrings.aiGenerateFailed(it.message) }
         }
     }
 
@@ -140,6 +158,7 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
         val r = result ?: return
         if (saving) return
         saving = true
+        val currentStrings = s
         val title = resultTitle
         val job = container.appScope.async { runCatching { container.pages.saveCustomPage(title, r.line, r.ref, "ai", r.regions) } }
         ioJobs.track(job)
@@ -147,63 +166,63 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
             val page = job.await()
             saving = false
             page.onSuccess {
-                if (colorNow) onColorNow(it.id) else { status = "✓ 已保存到「AI 魔法」离线图库"; result = null }
-            }.onFailure { status = "保存失败：${it.message}" }
+                if (colorNow) onColorNow(it.id) else { status = currentStrings.aiSavedToLibrary; result = null }
+            }.onFailure { status = currentStrings.aiSaveFailed(it.message) }
         }
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            EinkButton("← 返回") { onBack() }
+            EinkButton(s.backArrow) { onBack() }
             Column(Modifier.weight(1f)) {
-                Text("✨ AI 魔法画坊（家长模式）", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-                Text("模型：${container.settings.current.model}", fontSize = 14.sp, color = Eink.Muted)
+                Text(s.aiHeaderTitle, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                Text(s.aiModelLabel(container.settings.current.model), fontSize = 14.sp, color = Eink.Muted)
             }
         }
-        EinkSegmented(AiTab.entries.map { it to it.label }, tab) { if (!locked) { tab = it; result = null } }
+        EinkSegmented(AiTab.entries.map { it to it.label(s) }, tab, fontSize = 15) { if (!locked) { tab = it; result = null } }
 
         when (tab) {
             AiTab.COMBO -> {
-                EinkSegmented(listOf(false to "角色 × 场景", true to "🔤 字母 A–Z"), comboAlphabet) { comboAlphabet = it }
+                EinkSegmented(listOf(false to s.aiComboCharacterScene, true to s.aiComboAlphabet), comboAlphabet) { comboAlphabet = it }
                 if (!comboAlphabet) {
-                    Text("1. 主角", fontWeight = FontWeight.ExtraBold)
-                    ChipGrid(PromptBuilder.CHARACTERS.map { it.label }, character) { character = it }
-                    Text("2. 场景", fontWeight = FontWeight.ExtraBold)
-                    ChipGrid(PromptBuilder.SCENES.map { it.label }, scene) { scene = it }
+                    Text(s.aiStepCharacter, fontWeight = FontWeight.ExtraBold)
+                    ChipGrid(PromptBuilder.CHARACTERS.map { it.label(s) }, character) { character = it }
+                    Text(s.aiStepScene, fontWeight = FontWeight.ExtraBold)
+                    ChipGrid(PromptBuilder.SCENES.map { it.label(s) }, scene) { scene = it }
                 } else {
-                    Text("选一个字母（含可爱主题物：${PromptBuilder.ALPHABET_OBJECTS[letter]}）", fontWeight = FontWeight.ExtraBold)
+                    Text(s.aiPickLetterPrompt(s.alphabetObject(letter)), fontWeight = FontWeight.ExtraBold)
                     ChipGrid(('A'..'Z').map { "$it${it.lowercaseChar()}" }, letter, columns = 9, minHeight = 48) { letter = it }
                 }
             }
             AiTab.FREE -> OutlinedTextField(
                 value = freeText, onValueChange = { freeText = it },
-                placeholder = { Text("例如：小兔子在月亮上荡秋千") },
+                placeholder = { Text(s.aiFreePlaceholder) },
                 modifier = Modifier.fillMaxWidth().height(110.dp),
             )
             AiTab.PHOTO -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                EinkButton(if (photo == null) "📷 选择照片" else "📷 换一张", enabled = !locked) { pickPhoto.launch(arrayOf("image/*")) }
+                EinkButton(if (photo == null) s.aiPickPhoto else s.aiChangePhoto, enabled = !locked) { pickPhoto.launch(arrayOf("image/*")) }
                 photo?.let {
                     Image(it.asImageBitmap(), null, Modifier.height(96.dp).aspectRatio(it.width.toFloat() / it.height).border(Eink.Border, Eink.Ink))
                 }
-                Text("孩子 / 宠物 / 玩具照片都可以", fontSize = 14.sp, color = Eink.Muted)
+                Text(s.aiPhotoHint, fontSize = 14.sp, color = Eink.Muted)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("3. 线条难度：", fontWeight = FontWeight.ExtraBold)
-            EinkSegmented(PromptBuilder.Difficulty.entries.map { it to it.label }, difficulty, Modifier.weight(1f)) { difficulty = it }
+            Text(s.aiStepDifficulty, fontWeight = FontWeight.ExtraBold)
+            EinkSegmented(PromptBuilder.Difficulty.entries.map { it to it.label(s) }, difficulty, Modifier.weight(1f)) { difficulty = it }
         }
-        EinkButton(if (busy) "⏳ 生成中…" else "🪄 生成双图（线稿 + 参考图）", Modifier.fillMaxWidth(), selected = true, enabled = !locked) { generate() }
+        EinkButton(if (busy) s.aiGenerating else s.aiGenerateButton, Modifier.fillMaxWidth(), selected = true, enabled = !locked) { generate() }
         status?.let { Text(it, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
 
         val r = result
         if (r != null) {
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PreviewPane("涂色前 · 1-bit 线稿", r.line, Modifier.weight(1f))
-                PreviewPane("涂色后 · 参考彩图", r.ref, Modifier.weight(1f))
+                PreviewPane(s.aiPreviewLineArt, r.line, Modifier.weight(1f))
+                PreviewPane(s.aiPreviewRef, r.ref, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EinkButton(if (saving) "⏳ 保存中…" else "✓ 保存并立即开始涂色", Modifier.weight(2f), selected = true, enabled = !saving) { save(true) }
-                EinkButton("仅保存", Modifier.weight(1f), enabled = !saving) { save(false) }
+                EinkButton(if (saving) s.aiSaving else s.aiSaveAndColor, Modifier.weight(2f), selected = true, enabled = !saving) { save(true) }
+                EinkButton(s.aiSaveOnly, Modifier.weight(1f), enabled = !saving) { save(false) }
             }
         } else {
             Box(Modifier.weight(1f))
@@ -213,13 +232,14 @@ fun AiWorkshopScreen(container: AppContainer, onBack: () -> Unit, onColorNow: (S
 
 @Composable
 private fun PreviewPane(title: String, bmp: Bitmap?, modifier: Modifier) {
+    val s = LocalAppStrings.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         Box(Modifier.fillMaxSize().border(Eink.Border, Eink.Ink, Eink.Shape).padding(4.dp), contentAlignment = Alignment.Center) {
             if (bmp != null) {
                 Image(bmp.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
             } else {
-                Text("（无参考图）", color = Eink.Muted)
+                Text(s.aiNoRef, color = Eink.Muted)
             }
         }
     }

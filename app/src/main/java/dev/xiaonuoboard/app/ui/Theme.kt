@@ -199,12 +199,18 @@ fun EinkIconTextButton(
     }
 }
 
-/** Two-option toggle row ("开 / 关" style). */
+/** Multi-option toggle row. */
 @Composable
-fun <T> EinkSegmented(options: List<Pair<T, String>>, selected: T, modifier: Modifier = Modifier, onSelect: (T) -> Unit) {
+fun <T> EinkSegmented(
+    options: List<Pair<T, String>>,
+    selected: T,
+    modifier: Modifier = Modifier,
+    fontSize: Int = 17,
+    onSelect: (T) -> Unit,
+) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (value, label) ->
-            EinkButton(label, selected = value == selected, modifier = Modifier.weight(1f)) { onSelect(value) }
+            EinkButton(label, selected = value == selected, modifier = Modifier.weight(1f), fontSize = fontSize) { onSelect(value) }
         }
     }
 }

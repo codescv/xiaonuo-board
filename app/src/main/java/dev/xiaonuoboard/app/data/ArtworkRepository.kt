@@ -2,6 +2,7 @@ package dev.xiaonuoboard.app.data
 
 import android.content.Context
 import android.graphics.Bitmap
+import dev.xiaonuoboard.app.i18n.AppI18n
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,7 +68,7 @@ class ArtworkRepository(context: Context) {
     fun create(page: ColoringPage): Artwork = synchronized(lock) {
         val now = System.currentTimeMillis()
         val copyNo = (state.value.filter { it.pageId == page.id }.maxOfOrNull { it.copyNo } ?: 0) + 1
-        val art = Artwork("w_${now}_${(0..999).random()}", page.id, page.title, copyNo, now, now)
+        val art = Artwork("w_${now}_${(0..999).random()}", page.id, page.localizedTitle(AppI18n.resolved()), copyNo, now, now)
         persist(state.value + art)
         art
     }

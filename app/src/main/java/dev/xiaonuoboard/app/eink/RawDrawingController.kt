@@ -1,6 +1,7 @@
 package dev.xiaonuoboard.app.eink
 
 import dev.xiaonuoboard.app.engine.DirtyRect
+import dev.xiaonuoboard.app.i18n.AppI18n
 
 /** Primitive raw-pen events (view-local px), delivered on the UI thread by a [RawDrawingBackend]. */
 interface RawPenListener {
@@ -395,7 +396,7 @@ class RawDrawingController(
             consecutiveMisses = 0
         } else if (++consecutiveMisses >= MAX_MISSES) {
             DiagLog.log(DiagLog.RAW, "$MAX_MISSES-miss fallback: pen strokes arrive only as MotionEvents")
-            fail("TouchHelper 连续 $MAX_MISSES 笔未回传笔迹")
+            fail(AppI18n.strings().booxTouchHelperMissedStrokes(MAX_MISSES))
         } else {
             DiagLog.log(DiagLog.RAW) { "miss $consecutiveMisses/$MAX_MISSES (MotionEvent-only pen stroke)" }
         }

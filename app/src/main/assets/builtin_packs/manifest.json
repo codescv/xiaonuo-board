@@ -7,23 +7,38 @@
  "categories": [
   {
    "id": "elsa",
-   "title": "艾莎"
+   "title": "艾莎",
+   "title_zh": "艾莎",
+   "title_en": "Elsa",
+   "title_ja": "エルサ"
   },
   {
    "id": "bluey",
-   "title": "布鲁伊"
+   "title": "布鲁伊",
+   "title_zh": "布鲁伊",
+   "title_en": "Bluey",
+   "title_ja": "ブルーイ"
   },
   {
    "id": "peppa",
-   "title": "小猪佩奇"
+   "title": "小猪佩奇",
+   "title_zh": "小猪佩奇",
+   "title_en": "Peppa Pig",
+   "title_ja": "ペッパピッグ"
   },
   {
    "id": "anpanman",
-   "title": "面包超人"
+   "title": "面包超人",
+   "title_zh": "面包超人",
+   "title_en": "Anpanman",
+   "title_ja": "アンパンマン"
   },
   {
    "id": "alphabet",
-   "title": "字母"
+   "title": "字母",
+   "title_zh": "字母",
+   "title_en": "ABC",
+   "title_ja": "アルファベット"
   }
  ],
  "pages": [
@@ -43,7 +58,10 @@
     "#54CCE4",
     "#CCB484",
     "#84B4CC"
-   ]
+   ],
+   "title_zh": "艾莎微笑半身像",
+   "title_en": "Elsa Smiling Portrait",
+   "title_ja": "ほほえむエルサ"
   },
   {
    "id": "elsa_02",
@@ -61,7 +79,10 @@
     "#3C9CB4",
     "#FCFC54",
     "#6CB4CC"
-   ]
+   ],
+   "title_zh": "艾莎挥舞魔法雪花",
+   "title_en": "Elsa Magic Snowflakes",
+   "title_ja": "まほうの雪をふるエルサ"
   },
   {
    "id": "elsa_03",
@@ -79,7 +100,10 @@
     "#840C54",
     "#FCCCB4",
     "#9C2484"
-   ]
+   ],
+   "title_zh": "安娜开心招手",
+   "title_en": "Anna Waving Happily",
+   "title_ja": "にっこり手をふるアナ"
   },
   {
    "id": "elsa_04",
@@ -97,7 +121,10 @@
     "#54CCE4",
     "#FCCCB4",
     "#FCCC3C"
-   ]
+   ],
+   "title_zh": "艾莎冰雪长裙",
+   "title_en": "Elsa Ice Gown",
+   "title_ja": "氷のドレスのエルサ"
   },
   {
    "id": "elsa_05",
@@ -115,7 +142,10 @@
     "#FCB46C",
     "#CC9C3C",
     "#6C6C3C"
-   ]
+   ],
+   "title_zh": "克里斯托夫微笑",
+   "title_en": "Kristoff Smiling",
+   "title_ja": "にっこりクリストフ"
   },
   {
    "id": "elsa_06",
@@ -133,7 +163,10 @@
     "#FCCCB4",
     "#6C0C3C",
     "#84CCCC"
-   ]
+   ],
+   "title_zh": "安娜冬日小屋",
+   "title_en": "Anna's Winter Cabin",
+   "title_ja": "アナと冬のこや"
   },
   {
    "id": "elsa_07",
@@ -151,7 +184,10 @@
     "#B42484",
     "#24549C",
     "#CC2424"
-   ]
+   ],
+   "title_zh": "安娜和克里斯托夫喝热可可",
+   "title_en": "Anna & Kristoff Hot Cocoa",
+   "title_ja": "ホットココアをのむアナとクリストフ"
   },
   {
    "id": "elsa_08",
@@ -169,7 +205,10 @@
     "#FCCC9C",
     "#CC2484",
     "#CC3C3C"
-   ]
+   ],
+   "title_zh": "安娜和可爱雪人",
+   "title_en": "Anna & Cute Snowman",
+   "title_ja": "アナとかわいい雪だるま"
   },
   {
    "id": "elsa_09",
@@ -187,7 +226,10 @@
     "#3C3C54",
     "#FCCCB4",
     "#6C2454"
-   ]
+   ],
+   "title_zh": "安娜与克里斯托夫雪地散步",
+   "title_en": "Anna & Kristoff Snowy Walk",
+   "title_ja": "雪みちをおさんぽするアナとクリストフ"
   },
   {
    "id": "elsa_10",
@@ -205,7 +247,10 @@
     "#9C3C24",
     "#842454",
     "#CCFCFC"
-   ]
+   ],
+   "title_zh": "汉斯王子冬日微笑",
+   "title_en": "Prince Hans Winter Smile",
+   "title_ja": "冬のハンス王子"
   },
   {
    "id": "bluey_01",
@@ -223,7 +268,10 @@
     "#3C3C6C",
     "#E4CC6C",
     "#24243C"
-   ]
+   ],
+   "title_zh": "布鲁伊开心招手",
+   "title_en": "Bluey Waving Happily",
+   "title_ja": "にっこり手をふるブルーイ"
   },
   {
    "id": "bluey_02",
@@ -241,7 +289,10 @@
     "#E46C24",
     "#FC6CB4",
     "#3C3C24"
-   ]
+   ],
+   "title_zh": "宾果抱小兔玩偶",
+   "title_en": "Bingo Hugging Floppy",
+   "title_ja": "うさぎのぬいぐるみをだくビンゴ"
   },
   {
    "id": "bluey_03",
@@ -259,7 +310,10 @@
     "#3C3C6C",
     "#E4CC6C",
     "#FC846C"
-   ]
+   ],
+   "title_zh": "布鲁伊玩红气球",
+   "title_en": "Bluey & Red Balloon",
+   "title_ja": "赤いふうせんであそぶブルーイ"
   },
   {
    "id": "bluey_04",
@@ -277,7 +331,10 @@
     "#FCB454",
     "#B4543C",
     "#248484"
-   ]
+   ],
+   "title_zh": "玛芬戴皇冠开心笑",
+   "title_en": "Muffin with a Crown",
+   "title_ja": "おうかんをかぶったマフィン"
   },
   {
    "id": "bluey_05",
@@ -295,7 +352,10 @@
     "#FC9CB4",
     "#FCE484",
     "#FCE424"
-   ]
+   ],
+   "title_zh": "布鲁伊吃冰淇淋",
+   "title_en": "Bluey Eating Ice Cream",
+   "title_ja": "アイスクリームをたべるブルーイ"
   },
   {
    "id": "bluey_06",
@@ -313,7 +373,10 @@
     "#CCE4FC",
     "#FCFCCC",
     "#FCB46C"
-   ]
+   ],
+   "title_zh": "布鲁伊和宾果玩气球",
+   "title_en": "Bluey & Bingo Keepy Uppy",
+   "title_ja": "ふうせんであそぶブルーイとビンゴ"
   },
   {
    "id": "bluey_07",
@@ -331,7 +394,10 @@
     "#FC9C54",
     "#CC9C3C",
     "#E4CC6C"
-   ]
+   ],
+   "title_zh": "布鲁伊一家四口野餐",
+   "title_en": "Heeler Family Picnic",
+   "title_ja": "ブルーイかぞくのピクニック"
   },
   {
    "id": "bluey_08",
@@ -349,7 +415,10 @@
     "#3C3C6C",
     "#54B43C",
     "#CCE4FC"
-   ]
+   ],
+   "title_zh": "后院大树荡秋千",
+   "title_en": "Backyard Tree Swing",
+   "title_ja": "おにわの大きな木のブランコ"
   },
   {
    "id": "bluey_09",
@@ -367,7 +436,10 @@
     "#FCFCCC",
     "#3C3C6C",
     "#E46C3C"
-   ]
+   ],
+   "title_zh": "爸爸班迪特骑马游戏",
+   "title_en": "Horsey Ride with Bandit",
+   "title_ja": "パパ・バンディットのおうまさんごっこ"
   },
   {
    "id": "bluey_10",
@@ -385,7 +457,10 @@
     "#CCE4FC",
     "#FCFCCC",
     "#E4543C"
-   ]
+   ],
+   "title_zh": "妈妈奇莉海滩堆沙堡",
+   "title_en": "Beach Sandcastle with Chilli",
+   "title_ja": "ママ・チリとすなのおしろ"
   },
   {
    "id": "peppa_01",
@@ -403,7 +478,10 @@
     "#E4849C",
     "#CC5484",
     "#9D4EDD"
-   ]
+   ],
+   "title_zh": "佩奇穿红裙微笑",
+   "title_en": "Peppa in Red Dress",
+   "title_ja": "赤いドレスのペッパ"
   },
   {
    "id": "peppa_02",
@@ -421,7 +499,10 @@
     "#24843C",
     "#FF6F00",
     "#9D4EDD"
-   ]
+   ],
+   "title_zh": "乔治抱恐龙先生",
+   "title_en": "George & Mr. Dinosaur",
+   "title_ja": "きょうりゅうさんとジョージ"
   },
   {
    "id": "peppa_03",
@@ -439,7 +520,10 @@
     "#3CB4E4",
     "#FCE40C",
     "#FCE43C"
-   ]
+   ],
+   "title_zh": "佩奇开心跳泥坑",
+   "title_en": "Peppa Jumping in Muddy Puddles",
+   "title_ja": "どろんこ水たまりでジャンプ"
   },
   {
    "id": "peppa_04",
@@ -457,7 +541,10 @@
     "#5484CC",
     "#E40C0C",
     "#FC6CB4"
-   ]
+   ],
+   "title_zh": "佩奇骑滑板车",
+   "title_en": "Peppa on a Scooter",
+   "title_ja": "キックボードにのるペッパ"
   },
   {
    "id": "peppa_05",
@@ -475,7 +562,10 @@
     "#843C24",
     "#FCE424",
     "#FCE4CC"
-   ]
+   ],
+   "title_zh": "佩奇的生日蛋糕",
+   "title_en": "Peppa's Birthday Cake",
+   "title_ja": "ペッパのおたんじょうびケーキ"
   },
   {
    "id": "peppa_06",
@@ -493,7 +583,10 @@
     "#FC843C",
     "#2484CC",
     "#FC84CC"
-   ]
+   ],
+   "title_zh": "佩奇一家开红汽车",
+   "title_en": "Peppa's Family Red Car",
+   "title_ja": "赤い車でおでかけペッパかぞく"
   },
   {
    "id": "peppa_07",
@@ -511,7 +604,10 @@
     "#FC84CC",
     "#E45454",
     "#249CE4"
-   ]
+   ],
+   "title_zh": "佩奇花园茶话会",
+   "title_en": "Peppa's Garden Tea Party",
+   "title_ja": "おにわのおちゃかい"
   },
   {
    "id": "peppa_08",
@@ -529,7 +625,10 @@
     "#FCB4CC",
     "#FCCC3C",
     "#E4FCFC"
-   ]
+   ],
+   "title_zh": "佩奇和乔治坐小火车",
+   "title_en": "Peppa & George Train Ride",
+   "title_ja": "きしゃにのるペッパとジョージ"
   },
   {
    "id": "peppa_09",
@@ -547,7 +646,10 @@
     "#FCE424",
     "#84B43C",
     "#E43C3C"
-   ]
+   ],
+   "title_zh": "佩奇和乔治坐热气球",
+   "title_en": "Peppa & George Hot Air Balloon",
+   "title_ja": "ききゅうにのるペッパとジョージ"
   },
   {
    "id": "peppa_10",
@@ -565,7 +667,10 @@
     "#E45454",
     "#0C9CE4",
     "#FC2424"
-   ]
+   ],
+   "title_zh": "佩奇和乔治海边堆沙堡",
+   "title_en": "Peppa & George Beach Castle",
+   "title_ja": "うみですなのおしろづくり"
   },
   {
    "id": "anpanman_01",
@@ -583,7 +688,10 @@
     "#E40C0C",
     "#E45424",
     "#542424"
-   ]
+   ],
+   "title_zh": "面包超人飞行敬礼",
+   "title_en": "Anpanman Flying Salute",
+   "title_ja": "そらをとぶアンパンマン"
   },
   {
    "id": "anpanman_02",
@@ -601,7 +709,10 @@
     "#FCE43C",
     "#9C549C",
     "#6C546C"
-   ]
+   ],
+   "title_zh": "细菌人坐飞碟",
+   "title_en": "Baikinman in UFO",
+   "title_ja": "UFOにのるばいきんまん"
   },
   {
    "id": "anpanman_03",
@@ -619,7 +730,10 @@
     "#CCB454",
     "#CCE4E4",
     "#9D4EDD"
-   ]
+   ],
+   "title_zh": "吐司超人微笑招手",
+   "title_en": "Shokupanman Waving",
+   "title_ja": "ほほえむしょくぱんまん"
   },
   {
    "id": "anpanman_04",
@@ -637,7 +751,10 @@
     "#3C9C84",
     "#FCFC9C",
     "#CC5454"
-   ]
+   ],
+   "title_zh": "拉面天使端拉面碗",
+   "title_en": "Ramen Angel with Bowl",
+   "title_ja": "ラーメンてんしとラーメンどんぶり"
   },
   {
    "id": "anpanman_05",
@@ -655,7 +772,10 @@
     "#FCE424",
     "#E46C24",
     "#543C24"
-   ]
+   ],
+   "title_zh": "面包超人开心大笑",
+   "title_en": "Anpanman Happy Laugh",
+   "title_ja": "にっこりわらうアンパンマン"
   },
   {
    "id": "anpanman_06",
@@ -673,7 +793,10 @@
     "#E42424",
     "#9C543C",
     "#FCCC3C"
-   ]
+   ],
+   "title_zh": "面包超人与面包工厂",
+   "title_en": "Anpanman & Bakery",
+   "title_ja": "アンパンマンとパンこうじょう"
   },
   {
    "id": "anpanman_07",
@@ -691,7 +814,10 @@
     "#B40C3C",
     "#E40C24",
     "#9CE4CC"
-   ]
+   ],
+   "title_zh": "面包超人和吐司超人巡逻",
+   "title_en": "Anpanman & Shokupanman Patrol",
+   "title_ja": "アンパンマンとしょくぱんまんのパトロール"
   },
   {
    "id": "anpanman_08",
@@ -709,7 +835,10 @@
     "#E42424",
     "#846C9C",
     "#3C2424"
-   ]
+   ],
+   "title_zh": "面包超人与细菌人空中追逐",
+   "title_en": "Sky Chase with Baikinman",
+   "title_ja": "アンパンマンとばいきんまんの空のおいかけっこ"
   },
   {
    "id": "anpanman_09",
@@ -727,7 +856,10 @@
     "#CC843C",
     "#E40C24",
     "#FCE40C"
-   ]
+   ],
+   "title_zh": "大家一起野餐吃拉面",
+   "title_en": "Ramen Picnic Together",
+   "title_ja": "みんなでラーメンピクニック"
   },
   {
    "id": "anpanman_10",
@@ -745,13 +877,16 @@
     "#E49C6C",
     "#54B454",
     "#249CCC"
-   ]
+   ],
+   "title_zh": "彩虹天空大冒险",
+   "title_en": "Rainbow Sky Adventure",
+   "title_ja": "にじの空のだいぼうけん"
   },
   {
    "id": "alphabet_01",
    "category": "alphabet",
    "index": 1,
-   "title": "Aa 苹果 Apple",
+   "title": "Aa 苹果",
    "difficulty": "easy",
    "line": "alphabet/alphabet_01_line.png",
    "ref": "alphabet/alphabet_01_ref.webp",
@@ -763,13 +898,16 @@
     "#A45A2A",
     "#FFD600",
     "#FF6F00"
-   ]
+   ],
+   "title_zh": "Aa 苹果",
+   "title_en": "Aa Apple",
+   "title_ja": "Aa りんご"
   },
   {
    "id": "alphabet_02",
    "category": "alphabet",
    "index": 2,
-   "title": "Bb 小熊 Bear",
+   "title": "Bb 小熊",
    "difficulty": "easy",
    "line": "alphabet/alphabet_02_line.png",
    "ref": "alphabet/alphabet_02_ref.webp",
@@ -781,13 +919,16 @@
     "#E61919",
     "#FFB58A",
     "#FFD600"
-   ]
+   ],
+   "title_zh": "Bb 小熊",
+   "title_en": "Bb Bear",
+   "title_ja": "Bb くま"
   },
   {
    "id": "alphabet_03",
    "category": "alphabet",
    "index": 3,
-   "title": "Cc 小猫 Cat",
+   "title": "Cc 小猫",
    "difficulty": "easy",
    "line": "alphabet/alphabet_03_line.png",
    "ref": "alphabet/alphabet_03_ref.webp",
@@ -799,13 +940,16 @@
     "#FF70A6",
     "#E61919",
     "#FFD600"
-   ]
+   ],
+   "title_zh": "Cc 小猫",
+   "title_en": "Cc Cat",
+   "title_ja": "Cc ねこ"
   },
   {
    "id": "alphabet_04",
    "category": "alphabet",
    "index": 4,
-   "title": "Dd 小狗 Dog",
+   "title": "Dd 小狗",
    "difficulty": "easy",
    "line": "alphabet/alphabet_04_line.png",
    "ref": "alphabet/alphabet_04_ref.webp",
@@ -817,13 +961,16 @@
     "#2400FF",
     "#FFD600",
     "#FF70A6"
-   ]
+   ],
+   "title_zh": "Dd 小狗",
+   "title_en": "Dd Dog",
+   "title_ja": "Dd いぬ"
   },
   {
    "id": "alphabet_05",
    "category": "alphabet",
    "index": 5,
-   "title": "Ee 彩蛋 Egg",
+   "title": "Ee 彩蛋",
    "difficulty": "easy",
    "line": "alphabet/alphabet_05_line.png",
    "ref": "alphabet/alphabet_05_ref.webp",
@@ -835,13 +982,16 @@
     "#FF6F00",
     "#00B4D8",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Ee 彩蛋",
+   "title_en": "Ee Egg",
+   "title_ja": "Ee たまご"
   },
   {
    "id": "alphabet_06",
    "category": "alphabet",
    "index": 6,
-   "title": "Ff 小鱼 Fish",
+   "title": "Ff 小鱼",
    "difficulty": "easy",
    "line": "alphabet/alphabet_06_line.png",
    "ref": "alphabet/alphabet_06_ref.webp",
@@ -853,13 +1003,16 @@
     "#BDEBFA",
     "#FF006E",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Ff 小鱼",
+   "title_en": "Ff Fish",
+   "title_ja": "Ff さかな"
   },
   {
    "id": "alphabet_07",
    "category": "alphabet",
    "index": 7,
-   "title": "Gg 葡萄 Grapes",
+   "title": "Gg 葡萄",
    "difficulty": "easy",
    "line": "alphabet/alphabet_07_line.png",
    "ref": "alphabet/alphabet_07_ref.webp",
@@ -871,13 +1024,16 @@
     "#A45A2A",
     "#E61919",
     "#FF6F00"
-   ]
+   ],
+   "title_zh": "Gg 葡萄",
+   "title_en": "Gg Grapes",
+   "title_ja": "Gg ぶどう"
   },
   {
    "id": "alphabet_08",
    "category": "alphabet",
    "index": 8,
-   "title": "Hh 房子 House",
+   "title": "Hh 房子",
    "difficulty": "easy",
    "line": "alphabet/alphabet_08_line.png",
    "ref": "alphabet/alphabet_08_ref.webp",
@@ -889,13 +1045,16 @@
     "#FFD600",
     "#A45A2A",
     "#BDEBFA"
-   ]
+   ],
+   "title_zh": "Hh 房子",
+   "title_en": "Hh House",
+   "title_ja": "Hh いえ"
   },
   {
    "id": "alphabet_09",
    "category": "alphabet",
    "index": 9,
-   "title": "Ii 冰淇淋 Ice cream",
+   "title": "Ii 冰淇淋",
    "difficulty": "easy",
    "line": "alphabet/alphabet_09_line.png",
    "ref": "alphabet/alphabet_09_ref.webp",
@@ -907,13 +1066,16 @@
     "#E0A96D",
     "#E61919",
     "#FF6F00"
-   ]
+   ],
+   "title_zh": "Ii 冰淇淋",
+   "title_en": "Ii Ice cream",
+   "title_ja": "Ii アイスクリーム"
   },
   {
    "id": "alphabet_10",
    "category": "alphabet",
    "index": 10,
-   "title": "Jj 水母 Jellyfish",
+   "title": "Jj 水母",
    "difficulty": "easy",
    "line": "alphabet/alphabet_10_line.png",
    "ref": "alphabet/alphabet_10_ref.webp",
@@ -925,13 +1087,16 @@
     "#E3CCFF",
     "#BDEBFA",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Jj 水母",
+   "title_en": "Jj Jellyfish",
+   "title_ja": "Jj くらげ"
   },
   {
    "id": "alphabet_11",
    "category": "alphabet",
    "index": 11,
-   "title": "Kk 风筝 Kite",
+   "title": "Kk 风筝",
    "difficulty": "easy",
    "line": "alphabet/alphabet_11_line.png",
    "ref": "alphabet/alphabet_11_ref.webp",
@@ -943,13 +1108,16 @@
     "#E61919",
     "#9D4EDD",
     "#38B000"
-   ]
+   ],
+   "title_zh": "Kk 风筝",
+   "title_en": "Kk Kite",
+   "title_ja": "Kk カイト"
   },
   {
    "id": "alphabet_12",
    "category": "alphabet",
    "index": 12,
-   "title": "Ll 狮子 Lion",
+   "title": "Ll 狮子",
    "difficulty": "easy",
    "line": "alphabet/alphabet_12_line.png",
    "ref": "alphabet/alphabet_12_ref.webp",
@@ -961,13 +1129,16 @@
     "#A45A2A",
     "#E61919",
     "#38B000"
-   ]
+   ],
+   "title_zh": "Ll 狮子",
+   "title_en": "Ll Lion",
+   "title_ja": "Ll ライオン"
   },
   {
    "id": "alphabet_13",
    "category": "alphabet",
    "index": 13,
-   "title": "Mm 月亮 Moon",
+   "title": "Mm 月亮",
    "difficulty": "easy",
    "line": "alphabet/alphabet_13_line.png",
    "ref": "alphabet/alphabet_13_ref.webp",
@@ -979,13 +1150,16 @@
     "#BDEBFA",
     "#FF6F00",
     "#FF70A6"
-   ]
+   ],
+   "title_zh": "Mm 月亮",
+   "title_en": "Mm Moon",
+   "title_ja": "Mm つき"
   },
   {
    "id": "alphabet_14",
    "category": "alphabet",
    "index": 14,
-   "title": "Nn 鸟窝 Nest",
+   "title": "Nn 鸟窝",
    "difficulty": "easy",
    "line": "alphabet/alphabet_14_line.png",
    "ref": "alphabet/alphabet_14_ref.webp",
@@ -997,13 +1171,16 @@
     "#BDEBFA",
     "#00B4D8",
     "#FF70A6"
-   ]
+   ],
+   "title_zh": "Nn 鸟窝",
+   "title_en": "Nn Nest",
+   "title_ja": "Nn とりのす"
   },
   {
    "id": "alphabet_15",
    "category": "alphabet",
    "index": 15,
-   "title": "Oo 章鱼 Octopus",
+   "title": "Oo 章鱼",
    "difficulty": "easy",
    "line": "alphabet/alphabet_15_line.png",
    "ref": "alphabet/alphabet_15_ref.webp",
@@ -1015,13 +1192,16 @@
     "#E3CCFF",
     "#E61919",
     "#FF6F00"
-   ]
+   ],
+   "title_zh": "Oo 章鱼",
+   "title_en": "Oo Octopus",
+   "title_ja": "Oo タコ"
   },
   {
    "id": "alphabet_16",
    "category": "alphabet",
    "index": 16,
-   "title": "Pp 企鹅 Penguin",
+   "title": "Pp 企鹅",
    "difficulty": "easy",
    "line": "alphabet/alphabet_16_line.png",
    "ref": "alphabet/alphabet_16_ref.webp",
@@ -1033,13 +1213,16 @@
     "#E61919",
     "#FF6F00",
     "#FFD600"
-   ]
+   ],
+   "title_zh": "Pp 企鹅",
+   "title_en": "Pp Penguin",
+   "title_ja": "Pp ペンギン"
   },
   {
    "id": "alphabet_17",
    "category": "alphabet",
    "index": 17,
-   "title": "Qq 皇冠 Queen crown",
+   "title": "Qq 皇冠",
    "difficulty": "easy",
    "line": "alphabet/alphabet_17_line.png",
    "ref": "alphabet/alphabet_17_ref.webp",
@@ -1051,13 +1234,16 @@
     "#FF6F00",
     "#00B4D8",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Qq 皇冠",
+   "title_en": "Qq Queen crown",
+   "title_ja": "Qq おうかん"
   },
   {
    "id": "alphabet_18",
    "category": "alphabet",
    "index": 18,
-   "title": "Rr 彩虹 Rainbow",
+   "title": "Rr 彩虹",
    "difficulty": "easy",
    "line": "alphabet/alphabet_18_line.png",
    "ref": "alphabet/alphabet_18_ref.webp",
@@ -1069,13 +1255,16 @@
     "#FFD600",
     "#00B4D8",
     "#FF70A6"
-   ]
+   ],
+   "title_zh": "Rr 彩虹",
+   "title_en": "Rr Rainbow",
+   "title_ja": "Rr にじ"
   },
   {
    "id": "alphabet_19",
    "category": "alphabet",
    "index": 19,
-   "title": "Ss 太阳 Sun",
+   "title": "Ss 太阳",
    "difficulty": "easy",
    "line": "alphabet/alphabet_19_line.png",
    "ref": "alphabet/alphabet_19_ref.webp",
@@ -1087,13 +1276,16 @@
     "#E61919",
     "#38B000",
     "#007F5F"
-   ]
+   ],
+   "title_zh": "Ss 太阳",
+   "title_en": "Ss Sun",
+   "title_ja": "Ss たいよう"
   },
   {
    "id": "alphabet_20",
    "category": "alphabet",
    "index": 20,
-   "title": "Tt 大树 Tree",
+   "title": "Tt 大树",
    "difficulty": "easy",
    "line": "alphabet/alphabet_20_line.png",
    "ref": "alphabet/alphabet_20_ref.webp",
@@ -1105,13 +1297,16 @@
     "#E61919",
     "#FF6F00",
     "#FFD600"
-   ]
+   ],
+   "title_zh": "Tt 大树",
+   "title_en": "Tt Tree",
+   "title_ja": "Tt き"
   },
   {
    "id": "alphabet_21",
    "category": "alphabet",
    "index": 21,
-   "title": "Uu 雨伞 Umbrella",
+   "title": "Uu 雨伞",
    "difficulty": "easy",
    "line": "alphabet/alphabet_21_line.png",
    "ref": "alphabet/alphabet_21_ref.webp",
@@ -1123,13 +1318,16 @@
     "#FFD600",
     "#FF6F00",
     "#38B000"
-   ]
+   ],
+   "title_zh": "Uu 雨伞",
+   "title_en": "Uu Umbrella",
+   "title_ja": "Uu かさ"
   },
   {
    "id": "alphabet_22",
    "category": "alphabet",
    "index": 22,
-   "title": "Vv 火山 Volcano",
+   "title": "Vv 火山",
    "difficulty": "easy",
    "line": "alphabet/alphabet_22_line.png",
    "ref": "alphabet/alphabet_22_ref.webp",
@@ -1141,13 +1339,16 @@
     "#FF6F00",
     "#D5DBE5",
     "#FFD600"
-   ]
+   ],
+   "title_zh": "Vv 火山",
+   "title_en": "Vv Volcano",
+   "title_ja": "Vv かざん"
   },
   {
    "id": "alphabet_23",
    "category": "alphabet",
    "index": 23,
-   "title": "Ww 鲸鱼 Whale",
+   "title": "Ww 鲸鱼",
    "difficulty": "easy",
    "line": "alphabet/alphabet_23_line.png",
    "ref": "alphabet/alphabet_23_ref.webp",
@@ -1159,13 +1360,16 @@
     "#FFD600",
     "#FF70A6",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Ww 鲸鱼",
+   "title_en": "Ww Whale",
+   "title_ja": "Ww くじら"
   },
   {
    "id": "alphabet_24",
    "category": "alphabet",
    "index": 24,
-   "title": "Xx 木琴 Xylophone",
+   "title": "Xx 木琴",
    "difficulty": "easy",
    "line": "alphabet/alphabet_24_line.png",
    "ref": "alphabet/alphabet_24_ref.webp",
@@ -1177,13 +1381,16 @@
     "#E61919",
     "#FFD600",
     "#38B000"
-   ]
+   ],
+   "title_zh": "Xx 木琴",
+   "title_en": "Xx Xylophone",
+   "title_ja": "Xx もっきん"
   },
   {
    "id": "alphabet_25",
    "category": "alphabet",
    "index": 25,
-   "title": "Yy 悠悠球 Yo-yo",
+   "title": "Yy 悠悠球",
    "difficulty": "easy",
    "line": "alphabet/alphabet_25_line.png",
    "ref": "alphabet/alphabet_25_ref.webp",
@@ -1195,13 +1402,16 @@
     "#FF70A6",
     "#FF6F00",
     "#38B000"
-   ]
+   ],
+   "title_zh": "Yy 悠悠球",
+   "title_en": "Yy Yo-yo",
+   "title_ja": "Yy ヨーヨー"
   },
   {
    "id": "alphabet_26",
    "category": "alphabet",
    "index": 26,
-   "title": "Zz 斑马 Zebra",
+   "title": "Zz 斑马",
    "difficulty": "easy",
    "line": "alphabet/alphabet_26_line.png",
    "ref": "alphabet/alphabet_26_ref.webp",
@@ -1213,7 +1423,10 @@
     "#FF70A6",
     "#FFD600",
     "#E61919"
-   ]
+   ],
+   "title_zh": "Zz 斑马",
+   "title_en": "Zz Zebra",
+   "title_ja": "Zz しまうま"
   }
  ]
 }

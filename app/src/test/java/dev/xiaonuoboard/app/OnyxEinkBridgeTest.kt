@@ -7,6 +7,9 @@ import dev.xiaonuoboard.app.eink.BooxSdkMode
 import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.EinkSupport
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
+import dev.xiaonuoboard.app.i18n.EnStrings
+import dev.xiaonuoboard.app.i18n.JaStrings
+import dev.xiaonuoboard.app.i18n.ZhStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,7 +47,9 @@ class OnyxEinkBridgeTest {
         assertFalse(OnyxEinkBridge.isAvailable)
         assertFalse(OnyxEinkBridge.isTouchHelperAvailable)
         assertEquals(EinkSupport.NOT_BOOX, OnyxEinkBridge.support)
-        assertTrue(OnyxEinkBridge.statusText.contains("未检测到 BOOX"))
+        assertTrue(OnyxEinkBridge.statusText(ZhStrings).contains("未检测到 BOOX"))
+        assertTrue(OnyxEinkBridge.statusText(EnStrings).contains("No BOOX device detected"))
+        assertTrue(OnyxEinkBridge.statusText(JaStrings).contains("BOOX 端末未検出"))
 
         val v = CountingView()
         assertFalse(OnyxEinkBridge.setViewDefaultMode(v, EinkMode.REGAL))

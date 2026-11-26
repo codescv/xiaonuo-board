@@ -6,10 +6,12 @@ import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.engine.CanvasSpec
 import dev.xiaonuoboard.app.engine.RefAligner
 import dev.xiaonuoboard.app.engine.RegionMapEngine
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 import java.io.ByteArrayOutputStream
 
 /**
- * AI 魔法画坊 3-step pipeline:
+ * AI Magic Studio 3-step pipeline:
  *  1. Gemini → thick-black-line closed coloring page (optionally from a photo),
  *  2. on-device [LineArtSanitizer] (binarize + despeckle + gap closing + region QC),
  *  3. Gemini colorization of the sanitized line art, then [RefAligner] flattening so the reference
@@ -23,16 +25,22 @@ class AiPipeline(private val client: GeminiImageClient) {
         fun step(index: Int, message: String)
     }
 
-    fun run(prompt: String, photo: Bitmap? = null, colorize: Boolean = true, progress: Progress? = null): Output {
+    fun run(
+        prompt: String,
+        photo: Bitmap? = null,
+        colorize: Boolean = true,
+        strings: AppStrings = AppI18n.strings(),
+        progress: Progress? = null,
+    ): Output {
         val w = CanvasSpec.WIDTH
         val h = CanvasSpec.HEIGHT
-        progress?.step(1, "① 正在生成黑白封闭线稿…")
+        progress?.step(1, strings.aiStep1GenerateLine)
         val inputs = photo?.let { listOf(InlineImage("image/jpeg", jpeg(it))) } ?: emptyList()
         val raw = client.generate(prompt, inputs).firstImage
         val rawBmp = BitmapFactory.decodeByteArray(raw.bytes, 0, raw.bytes.size)
-            ?: throw GeminiException("无法解码模型返回的线稿图片")
+            ?: throw GeminiException(strings.aiDecodeLineError)
 
-        progress?.step(2, "② 本地二值化去噪 + 闭运算封口质检…")
+        progress?.step(2, strings.aiStep2Sanitize)
         val fitted = BitmapIO.fitToCanvas(rawBmp, w, h)
         if (fitted !== rawBmp) rawBmp.recycle()
         val clean = LineArtSanitizer.sanitize(BitmapIO.pixels(fitted), w, h)
@@ -40,9 +48,9 @@ class AiPipeline(private val client: GeminiImageClient) {
         val lineBmp = Bitmap.createBitmap(LineArtSanitizer.toLineArgb(clean.ink, transparentPaper = false), w, h, Bitmap.Config.ARGB_8888)
 
         var ref: Bitmap? = null
-        var note = "线稿质检：${clean.regionCount} 块可填色区域"
+        var note = strings.aiLineQcNote(clean.regionCount)
         if (colorize) {
-            progress?.step(3, "③ 正在生成像素对齐的参考涂色图…")
+            progress?.step(3, strings.aiStep3Colorize)
             try {
                 val colored = client.generate(PromptBuilder.COLORIZE, listOf(InlineImage("image/png", png(lineBmp)))).firstImage
                 val colBmp = BitmapFactory.decodeByteArray(colored.bytes, 0, colored.bytes.size)
@@ -55,7 +63,7 @@ class AiPipeline(private val client: GeminiImageClient) {
                     ref = Bitmap.createBitmap(flat, w, h, Bitmap.Config.ARGB_8888)
                 }
             } catch (e: GeminiException) {
-                note += "（参考图生成失败：${e.message}）"
+                note += strings.aiRefFailedSuffix(e.message)
             }
         }
         return Output(lineBmp, ref, clean.regionCount, clean.passesQc, note)
@@ -77,7 +85,7 @@ class AiPipeline(private val client: GeminiImageClient) {
 
     companion object {
         /** Local import path (no network): sanitize an arbitrary picture into closed line art. Does not recycle [src]. */
-        fun importLocal(src: Bitmap): Output {
+        fun importLocal(src: Bitmap, strings: AppStrings = AppI18n.strings()): Output {
             val w = CanvasSpec.WIDTH
             val h = CanvasSpec.HEIGHT
             val fitted = BitmapIO.fitToCanvas(src, w, h)
@@ -93,7 +101,7 @@ class AiPipeline(private val client: GeminiImageClient) {
             } else {
                 null
             }
-            return Output(lineBmp, ref, clean.regionCount, clean.passesQc, "导入线稿：${clean.regionCount} 块可填色区域")
+            return Output(lineBmp, ref, clean.regionCount, clean.passesQc, strings.aiImportNote(clean.regionCount))
         }
     }
 }

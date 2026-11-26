@@ -12,6 +12,8 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import dev.xiaonuoboard.app.BuildConfig
 import dev.xiaonuoboard.app.data.SettingsStore
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,25 +59,25 @@ sealed interface InstallLaunchResult {
 
 /** Verifies downloaded APK package name, versionCode, and signing certificate against the installed app. */
 object ApkValidator {
-    fun validate(context: Context, apkFile: File) {
+    fun validate(context: Context, apkFile: File, strings: AppStrings = AppI18n.strings()) {
         val pm = context.packageManager
         val installed = getInstalledPackageInfo(pm, context.packageName)
-            ?: throw UpdateException(UpdateErrorCode.VERIFY_FAILED, "无法读取已安装应用信息")
+            ?: throw UpdateException(UpdateErrorCode.VERIFY_FAILED, strings.updateApkReadInstalledFailed)
         val archive = getArchivePackageInfo(pm, apkFile.absolutePath)
-            ?: throw UpdateException(UpdateErrorCode.CORRUPT_DOWNLOAD, "APK 解析失败，文件可能已损坏")
+            ?: throw UpdateException(UpdateErrorCode.CORRUPT_DOWNLOAD, strings.updateApkParseFailed)
 
         if (archive.packageName != context.packageName) {
-            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, "APK 包名不匹配 (${archive.packageName})")
+            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, strings.updateApkPackageMismatch(archive.packageName))
         }
         val installedCode = versionCodeOf(installed)
         val archiveCode = versionCodeOf(archive)
         if (archiveCode < installedCode) {
-            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, "新包版本号 ($archiveCode) 低于当前版本 ($installedCode)")
+            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, strings.updateApkDowngrade(archiveCode, installedCode))
         }
         val installedDigests = certDigests(installed)
         val archiveDigests = certDigests(archive)
         if (installedDigests.isEmpty() || archiveDigests.isEmpty() || installedDigests != archiveDigests) {
-            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, "APK 签名与当前安装版本不一致，已拦截安装")
+            throw UpdateException(UpdateErrorCode.VERIFY_FAILED, strings.updateApkSignatureMismatch)
         }
     }
 
@@ -171,7 +173,7 @@ class UpdateManager(
                         if (force) {
                             _state.value = UpdateUiState.Error(
                                 code = UpdateErrorCode.NO_ASSET,
-                                message = "发现 ${result.latest.tagName}，但暂未附带 APK 文件",
+                                message = AppI18n.strings().updateFoundNoAsset(result.latest.tagName),
                                 releasePageUrl = result.latest.htmlUrl ?: ReleaseParser.DEFAULT_RELEASE_HTML_URL,
                             )
                         }
@@ -202,7 +204,7 @@ class UpdateManager(
                 }
             } catch (e: Exception) {
                 if (force) {
-                    _state.value = UpdateUiState.Error(UpdateErrorCode.NETWORK, e.message ?: "检查更新失败")
+                    _state.value = UpdateUiState.Error(UpdateErrorCode.NETWORK, e.message ?: AppI18n.strings().updateCheckFailed)
                 }
             }
         }
@@ -255,7 +257,7 @@ class UpdateManager(
                 dest.delete()
                 _state.value = UpdateUiState.Error(
                     code = UpdateErrorCode.NETWORK,
-                    message = e.message ?: "下载失败",
+                    message = e.message ?: AppI18n.strings().updateDownloadFailed,
                     releasePageUrl = release.htmlUrl ?: ReleaseParser.DEFAULT_RELEASE_HTML_URL,
                 )
             }
@@ -267,12 +269,13 @@ class UpdateManager(
     }
 
     fun launchInstaller(context: Context): InstallLaunchResult {
+        val s = AppI18n.strings()
         val ready = _state.value as? UpdateUiState.Ready
-            ?: return InstallLaunchResult.Failed("还没有已校验的安装包")
+            ?: return InstallLaunchResult.Failed(s.updateNoVerifiedApk)
         if (!ready.apkFile.isFile) {
             pendingInstallApk = null
             _state.value = UpdateUiState.Idle
-            return InstallLaunchResult.Failed("缓存的安装包已被清理，请重新检查更新")
+            return InstallLaunchResult.Failed(s.updateCachedApkCleared)
         }
         return if (canRequestPackageInstalls()) {
             pendingInstallApk = null
@@ -300,9 +303,10 @@ class UpdateManager(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O || appContext.packageManager.canRequestPackageInstalls()
 
     private fun startInstallerActivity(context: Context, apkFile: File): InstallLaunchResult {
+        val s = AppI18n.strings()
         if (!apkFile.isFile) {
             _state.value = UpdateUiState.Idle
-            return InstallLaunchResult.Failed("安装包不存在，请重新下载")
+            return InstallLaunchResult.Failed(s.updateApkMissing)
         }
         return try {
             val contentUri = FileProvider.getUriForFile(appContext, "${appContext.packageName}.fileprovider", apkFile)
@@ -313,7 +317,7 @@ class UpdateManager(
             context.startActivity(intent)
             InstallLaunchResult.Launched
         } catch (e: Exception) {
-            InstallLaunchResult.Failed(e.message ?: "无法拉起系统安装器")
+            InstallLaunchResult.Failed(e.message ?: s.updateLaunchInstallerFailed)
         }
     }
 
@@ -344,16 +348,16 @@ class UpdateManager(
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    private fun friendlyMessage(e: UpdateException): String = when (e.code) {
-        UpdateErrorCode.RATE_LIMITED -> "GitHub 请求过于频繁，请稍后再试"
-        UpdateErrorCode.VERIFY_FAILED -> e.message ?: "安装包签名或校验失败"
-        UpdateErrorCode.INSECURE_URL -> "拦截了不安全的更新地址"
-        UpdateErrorCode.TIMEOUT -> "连接 GitHub 超时，请检查网络"
-        UpdateErrorCode.NOT_FOUND -> "GitHub 暂未发布新版本"
-        UpdateErrorCode.NO_ASSET -> "新版本暂未附带 APK 文件"
-        UpdateErrorCode.CORRUPT_DOWNLOAD -> "安装包下载不完整或损坏"
-        UpdateErrorCode.BAD_JSON -> "无法解析 GitHub 版本信息"
-        UpdateErrorCode.CANCELLED -> "已取消更新"
-        UpdateErrorCode.NETWORK -> e.message ?: "无法连接 GitHub"
+    private fun friendlyMessage(e: UpdateException, s: AppStrings = AppI18n.strings()): String = when (e.code) {
+        UpdateErrorCode.RATE_LIMITED -> s.updateErrRateLimited
+        UpdateErrorCode.VERIFY_FAILED -> e.message ?: s.updateErrVerifyFailed
+        UpdateErrorCode.INSECURE_URL -> s.updateErrInsecureUrl
+        UpdateErrorCode.TIMEOUT -> s.updateErrTimeout
+        UpdateErrorCode.NOT_FOUND -> s.updateErrNotFound
+        UpdateErrorCode.NO_ASSET -> s.updateErrNoAsset
+        UpdateErrorCode.CORRUPT_DOWNLOAD -> s.updateErrCorruptDownload
+        UpdateErrorCode.BAD_JSON -> s.updateErrBadJson
+        UpdateErrorCode.CANCELLED -> s.updateErrCancelled
+        UpdateErrorCode.NETWORK -> e.message ?: s.updateErrNetwork
     }
 }

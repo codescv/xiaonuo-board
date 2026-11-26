@@ -8,15 +8,17 @@ import android.media.ToneGenerator
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 import java.io.File
 import java.io.FileOutputStream
 
-/** 1-tap HD PNG export into `Pictures/小诺画板/` via MediaStore (scoped storage on API 29+). */
+/** 1-tap HD PNG export into `Pictures/XiaonuoBoard/` via MediaStore (scoped storage on API 29+). */
 object GalleryExporter {
-    const val ALBUM = "小诺画板"
+    const val ALBUM = "XiaonuoBoard"
 
     /** @return a human-readable location string. */
-    fun exportPng(context: Context, bitmap: Bitmap, displayName: String): String {
+    fun exportPng(context: Context, bitmap: Bitmap, displayName: String, strings: AppStrings = AppI18n.strings()): String {
         val name = displayName.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".png"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
@@ -27,10 +29,10 @@ object GalleryExporter {
             }
             val resolver = context.contentResolver
             val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                ?: throw IllegalStateException("无法创建相册文件")
+                ?: throw IllegalStateException(strings.galleryCreateFileFailed)
             try {
                 resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    ?: throw IllegalStateException("无法写入相册")
+                    ?: throw IllegalStateException(strings.galleryWriteFailed)
                 values.clear()
                 values.put(MediaStore.Images.Media.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)

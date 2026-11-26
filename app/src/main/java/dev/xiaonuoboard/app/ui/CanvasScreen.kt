@@ -60,6 +60,7 @@ import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.KaleidoPalette
 import dev.xiaonuoboard.app.engine.PaletteExtractor
 import dev.xiaonuoboard.app.engine.Tool
+import dev.xiaonuoboard.app.i18n.LocalAppStrings
 import dev.xiaonuoboard.app.ui.canvas.ColoringCanvasView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -70,6 +71,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Everything needed to color one artwork, loaded off the main thread. */
@@ -97,6 +99,7 @@ fun CanvasScreen(
     onArtworkCreated: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    val str = LocalAppStrings.current
     val context = LocalContext.current
     val settings by container.settings.settings.collectAsState()
     val initialArtworkId = remember(pageId) { artworkId }
@@ -109,10 +112,10 @@ fun CanvasScreen(
     val s = loaded.second
     if (s == null) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (loaded.first) "这张画打不开了 😢" else "正在准备画纸…", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(if (loaded.first) str.canvasLoadError else str.canvasLoading, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             if (loaded.first) {
                 Spacer(Modifier.height(16.dp))
-                EinkButton("← 返回") { onBack() }
+                EinkButton(str.backArrow) { onBack() }
             }
         }
         return
@@ -136,7 +139,7 @@ fun CanvasScreen(
     var confirmReset by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var celebrated by remember { mutableStateOf(false) }
-    /** Bumped on 清空 so an in-flight save's celebration from before the reset is dropped. */
+    /** Bumped on reset so an in-flight save's celebration from before the reset is dropped. */
     var resetCount by remember { mutableIntStateOf(0) }
     val saveTicks = remember { MutableStateFlow(0) }
     /** An auto-save fired mid-stroke; it is re-queued as soon as that stroke ends. */
@@ -181,6 +184,7 @@ fun CanvasScreen(
         }
         val mayCelebrate = notifyNav && !celebrated
         val resetsAtSnapshot = resetCount
+        val celebrationText = str.canvasCelebration
         return ioJobs.track(container.appScope.launch {
             val bgT0 = System.nanoTime()
             val progress = controller.progress(pixels)
@@ -190,7 +194,7 @@ fun CanvasScreen(
                     // the page was not cleared since the snapshot.
                     if (!celebrated && !view.isReleased && resetCount == resetsAtSnapshot) {
                         celebrated = true
-                        message = "🎉 太棒啦！这幅画快涂完啦！"
+                        message = celebrationText
                         container.sound.cheer()
                     }
                 }
@@ -206,7 +210,7 @@ fun CanvasScreen(
                 ThumbCache.invalidate("file:${container.artworks.thumbFile(id).absolutePath}")
                 DiagLog.log(DiagLog.SAVE) {
                     "autosave snapshot(UI)=${DiagLog.ms(snapshotNanos)}ms bgSave=${DiagLog.ms(System.nanoTime() - bgT0)}ms " +
-                        "progress=${"%.2f".format(java.util.Locale.US, progress)} final=${!notifyNav}"
+                        "progress=${"%.2f".format(Locale.US, progress)} final=${!notifyNav}"
                 }
             } catch (e: Exception) {
                 DiagLog.log(DiagLog.SAVE, "autosave FAILED: ${e.javaClass.simpleName}: ${e.message}")
@@ -220,7 +224,7 @@ fun CanvasScreen(
         })
     }
 
-    // The inline 「确认清空?」 confirmation expires on its own (it also suspends BOOX raw drawing).
+    // The inline reset confirmation expires on its own (it also suspends BOOX raw drawing).
     LaunchedEffect(confirmReset) {
         if (confirmReset) {
             delay(CONFIRM_RESET_TIMEOUT_MS)
@@ -264,10 +268,10 @@ fun CanvasScreen(
         val c = ref.getPixel(x, y)
         val lum = (((c shr 16) and 0xFF) * 299 + ((c shr 8) and 0xFF) * 587 + (c and 0xFF) * 114) / 1000
         if (lum < 40) {
-            message = "那是黑线哦，点一下色块吸色吧"
+            message = str.canvasEyedropperBlackLine
         } else {
             color = c or (0xFF shl 24)
-            message = "已吸取参考色 ${PaletteExtractor.toHex(c)}"
+            message = str.canvasEyedropperPicked(PaletteExtractor.toHex(c))
             if (tool == Tool.ERASER) tool = Tool.FILL
         }
     }
@@ -294,7 +298,7 @@ fun CanvasScreen(
             ) { tint -> KidIcons.ClipLock(stayInside, tint) }
             EinkIconButton(
                 m,
-                onClick = { if (controller.undo() == null) message = "没有可以撤销的步骤啦" },
+                onClick = { if (controller.undo() == null) message = str.canvasNothingToUndo },
             ) { tint -> KidIcons.Undo(tint) }
             EinkIconButton(
                 m,
@@ -308,7 +312,9 @@ fun CanvasScreen(
                     if (view.isReleased) return@EinkIconButton
                     saveNow()
                     val pixels = view.snapshotPixels()
-                    message = "正在导出高清 PNG…"
+                    val currentStrings = str
+                    val exportTitle = s.page.localizedTitle(currentStrings.language)
+                    message = currentStrings.canvasExportingPng
                     ioJobs.track(container.appScope.launch {
                         val result = run {
                             var snapshot: Bitmap? = null
@@ -316,11 +322,11 @@ fun CanvasScreen(
                             try {
                                 snapshot = Bitmap.createBitmap(pixels, controller.width, controller.height, Bitmap.Config.ARGB_8888)
                                 out = BitmapIO.composite(snapshot, s.lineOverlay)
-                                val where = GalleryExporter.exportPng(context, out, "${s.page.title}_${System.currentTimeMillis()}")
+                                val where = GalleryExporter.exportPng(context, out, "${exportTitle}_${System.currentTimeMillis()}", currentStrings)
                                 currentArtworkId?.let { container.artworks.markExported(it) }
-                                "✓ 已保存到相册 $where"
+                                currentStrings.canvasExportSuccess(where)
                             } catch (e: Exception) {
-                                "导出失败：${e.message}"
+                                currentStrings.exportFailed(e.message)
                             } finally {
                                 out?.recycle()
                                 snapshot?.recycle()
@@ -345,17 +351,17 @@ fun CanvasScreen(
                         selected = brush == b,
                         minHeight = 48.dp,
                         onClick = { brush = b },
-                    ) { tint -> KidIcons.BrushDot(dp, tint, b.label) }
+                    ) { tint -> KidIcons.BrushDot(dp, tint, b.label(str)) }
                 }
             }
             Spacer(Modifier.weight(1f))
             if (zoom > 1.01f) {
-                EinkButton("${"%.1f".format(zoom)}×", Modifier.fillMaxHeight(), fontSize = 15, minHeight = 48.dp) {
+                EinkButton("${String.format(Locale.US, "%.1f", zoom)}×", Modifier.fillMaxHeight(), fontSize = 15, minHeight = 48.dp) {
                     canvasView?.resetZoom()
                 }
             }
             if (confirmReset) {
-                EinkButton("确认清空?", Modifier.fillMaxHeight(), selected = true, fontSize = 15, minHeight = 48.dp) {
+                EinkButton(str.canvasConfirmReset, Modifier.fillMaxHeight(), selected = true, fontSize = 15, minHeight = 48.dp) {
                     controller.reset(); confirmReset = false; celebrated = false; resetCount++
                 }
             } else {
@@ -386,7 +392,7 @@ fun CanvasScreen(
                     update = { v ->
                         if (v.ghostVisible != ghost) v.ghostVisible = ghost
                         // BOOX TouchHelper: armed for crayon / eraser only (never the bucket), and
-                        // suspended while the enlarged reference or the 清空 confirmation is up.
+                        // suspended while the enlarged reference or the reset confirmation is up.
                         v.syncToolState(tool, brush, color, suspendRaw = pipExpanded || confirmReset)
                         v.setRawExcludeRectsInWindow(
                             listOfNotNull(
@@ -442,8 +448,8 @@ fun CanvasScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("参考图 · 点任意位置吸色", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                        EinkButton("关闭", fontSize = 15) { pipExpanded = false }
+                        Text(str.canvasRefExpandedTitle, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                        EinkButton(str.close, fontSize = 15) { pipExpanded = false }
                     }
                     RefImage(s.ref ?: s.refThumb, Modifier.fillMaxWidth().aspectRatio(0.75f)) { fx, fy ->
                         pickFromRef(fx, fy); pipExpanded = false
@@ -475,7 +481,7 @@ fun CanvasScreen(
                     onClick = {
                         stylusOnly = !stylusOnly
                         container.settings.update { it.copy(stylusOnly = stylusOnly) }
-                        message = if (stylusOnly) "仅笔作画(防误触)：手指只能缩放和拖动" else "手笔皆可涂色"
+                        message = if (stylusOnly) str.canvasStylusOnlyOn else str.canvasStylusOnlyOff
                     },
                 ) { tint -> KidIcons.StylusMode(stylusOnly, tint) }
             }
@@ -497,12 +503,13 @@ private fun UiRect.toAndroidRect() =
 
 @Composable
 private fun RefImage(bmp: Bitmap, modifier: Modifier, onPick: (Float, Float) -> Unit) {
+    val s = LocalAppStrings.current
     Box(
         modifier.border(Eink.Border, Eink.Ink, RoundedCornerShape(6.dp)).pointerInput(bmp) {
             detectTapGestures { o -> onPick(o.x / size.width, o.y / size.height) }
         },
     ) {
-        Image(bmp.asImageBitmap(), contentDescription = "参考涂色图", contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
+        Image(bmp.asImageBitmap(), contentDescription = s.cdRefImage, contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
     }
 }
 

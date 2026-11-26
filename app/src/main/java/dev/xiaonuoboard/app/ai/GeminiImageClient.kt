@@ -1,5 +1,7 @@
 package dev.xiaonuoboard.app.ai
 
+import dev.xiaonuoboard.app.i18n.AppI18n
+import dev.xiaonuoboard.app.i18n.AppStrings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -27,10 +29,13 @@ object GeminiModels {
     const val DEFAULT = "gemini-nano-banana-2.1"
     const val DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
-    data class Option(val id: String, val label: String)
+    data class Option(val id: String, val baseLabel: String, val isDefault: Boolean = false) {
+        fun label(strings: AppStrings = AppI18n.strings()): String =
+            if (isDefault) baseLabel + strings.geminiDefaultSuffix else baseLabel
+    }
 
     val OPTIONS = listOf(
-        Option(DEFAULT, "Nano Banana 2.1（默认）"),
+        Option(DEFAULT, "Nano Banana 2.1", isDefault = true),
         Option("gemini-3-pro-image", "Nano Banana Pro"),
         Option("gemini-3.1-flash-lite-image", "Nano Banana 2 Lite"),
     )
@@ -60,7 +65,8 @@ class GeminiException(message: String, val httpCode: Int = 0, cause: Throwable? 
 class InlineImage(val mimeType: String, val bytes: ByteArray)
 
 data class GeminiResult(val images: List<InlineImage>, val text: String) {
-    val firstImage: InlineImage get() = images.firstOrNull() ?: throw GeminiException("模型未返回图片：${text.take(200)}")
+    val firstImage: InlineImage
+        get() = images.firstOrNull() ?: throw GeminiException(AppI18n.strings().geminiNoImageReturned(text.take(200)))
 }
 
 /**
@@ -104,33 +110,34 @@ class GeminiImageClient(
 
     /** Synchronous call; run on a background dispatcher. */
     fun generate(prompt: String, images: List<InlineImage> = emptyList(), aspectRatio: String? = "3:4"): GeminiResult {
+        val s = AppI18n.strings()
         val cfg = configProvider()
-        if (cfg.apiKey.isBlank()) throw GeminiException("请先在家长设置中填写 Gemini API Key")
-        val request = buildRequest(cfg, cfg.generateContentUrl()) {
+        if (cfg.apiKey.isBlank()) throw GeminiException(s.geminiMissingApiKeySettings)
+        val request = buildRequest(cfg, cfg.generateContentUrl(), s) {
             post(buildRequestBody(prompt, images, aspectRatio).toRequestBody(JSON_MEDIA))
         }
         val response = try {
             http.newCall(request).execute()
         } catch (e: IOException) {
-            throw GeminiException("网络连接失败：${e.message}", cause = e)
+            throw GeminiException(s.geminiNetworkFailed(e.message), cause = e)
         }
         response.use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw GeminiException(errorMessage(resp.code, text), resp.code)
-            return parseResponse(text)
+            if (!resp.isSuccessful) throw GeminiException(errorMessage(resp.code, text, s), resp.code)
+            return parseResponse(text, s)
         }
     }
 
-    fun parseResponse(text: String): GeminiResult {
+    fun parseResponse(text: String, s: AppStrings = AppI18n.strings()): GeminiResult {
         val root = try {
             json.parseToJsonElement(text).jsonObject
         } catch (e: Exception) {
-            throw GeminiException("无法解析模型响应", cause = e)
+            throw GeminiException(s.geminiParseFailed, cause = e)
         }
         (root["promptFeedback"] as? JsonObject)?.get("blockReason")?.jsonPrimitive?.contentOrNull?.let {
-            throw GeminiException("请求被安全策略拦截：$it")
+            throw GeminiException(s.geminiSafetyBlocked(it))
         }
-        val candidates = root["candidates"] as? JsonArray ?: throw GeminiException("模型响应缺少 candidates")
+        val candidates = root["candidates"] as? JsonArray ?: throw GeminiException(s.geminiMissingCandidates)
         val images = ArrayList<InlineImage>()
         val sb = StringBuilder()
         for (cand in candidates) {
@@ -145,9 +152,9 @@ class GeminiImageClient(
                         // Strip line wrapping emitted by some proxies, then decode strictly so corrupt data is rejected.
                         Base64.getDecoder().decode(data.filterNot { it.isWhitespace() })
                     } catch (e: IllegalArgumentException) {
-                        throw GeminiException("模型返回的图片数据损坏", cause = e)
+                        throw GeminiException(s.geminiCorruptImage, cause = e)
                     }
-                    if (bytes.isEmpty()) throw GeminiException("模型返回的图片数据为空")
+                    if (bytes.isEmpty()) throw GeminiException(s.geminiEmptyImage)
                     images += InlineImage(mime, bytes)
                 }
                 p["text"]?.jsonPrimitive?.contentOrNull?.let { sb.append(it) }
@@ -160,50 +167,56 @@ class GeminiImageClient(
      * Connectivity check: verifies key + base URL + model by calling `GET {base}/v1beta/models/{model}`.
      * Returns a human-readable status line.
      */
-    fun testConnectivity(): String {
+    fun testConnectivity(s: AppStrings = AppI18n.strings()): String {
         val cfg = configProvider()
-        if (cfg.apiKey.isBlank()) throw GeminiException("请先填写 API Key")
-        val request = buildRequest(cfg, "${cfg.normalizedBaseUrl}/v1beta/models/${cfg.normalizedModel}") { get() }
+        if (cfg.apiKey.isBlank()) throw GeminiException(s.geminiMissingApiKeyShort)
+        val request = buildRequest(cfg, "${cfg.normalizedBaseUrl}/v1beta/models/${cfg.normalizedModel}", s) { get() }
         val response = try {
             http.newCall(request).execute()
         } catch (e: IOException) {
-            throw GeminiException("网络连接失败：${e.message}", cause = e)
+            throw GeminiException(s.geminiNetworkFailed(e.message), cause = e)
         }
         response.use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw GeminiException(errorMessage(resp.code, text), resp.code)
+            if (!resp.isSuccessful) throw GeminiException(errorMessage(resp.code, text, s), resp.code)
             val name = runCatching {
                 json.parseToJsonElement(text).jsonObject["displayName"]?.jsonPrimitive?.contentOrNull
             }.getOrNull()
-            return "连接成功 ✓ ${name ?: cfg.normalizedModel}"
+            return s.geminiConnectSuccess(name ?: cfg.normalizedModel)
         }
     }
 
     /** Builds a request, mapping malformed URLs / header values to [GeminiException] instead of crashing. */
-    private fun buildRequest(cfg: GeminiConfig, url: String, method: Request.Builder.() -> Request.Builder): Request {
+    private fun buildRequest(
+        cfg: GeminiConfig,
+        url: String,
+        s: AppStrings,
+        method: Request.Builder.() -> Request.Builder,
+    ): Request {
         val key = cfg.apiKey.filterNot { it.isWhitespace() }
         val httpUrl = url.toHttpUrlOrNull()
-            ?: throw GeminiException("Base URL 格式错误（需以 https:// 开头）：${cfg.normalizedBaseUrl}")
+            ?: throw GeminiException(s.geminiInvalidBaseUrl(cfg.normalizedBaseUrl))
         return try {
             Request.Builder().url(httpUrl).header("x-goog-api-key", key).method().build()
         } catch (e: IllegalArgumentException) {
-            throw GeminiException("API Key 含有非法字符", cause = e)
+            throw GeminiException(s.geminiInvalidApiKeyChars, cause = e)
         }
     }
 
-    private fun errorMessage(code: Int, body: String): String {
+    private fun errorMessage(code: Int, body: String, s: AppStrings): String {
         val detail = runCatching {
             json.parseToJsonElement(body).jsonObject["error"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
         }.getOrNull()
         val hint = when (code) {
-            400 -> "请求参数错误"
-            401, 403 -> "API Key 无效或无权限"
-            404 -> "模型不存在或 Base URL 错误"
-            429 -> "调用过于频繁或配额不足"
-            in 500..599 -> "服务暂时不可用"
-            else -> "请求失败"
+            400 -> s.geminiHttp400
+            401, 403 -> s.geminiHttp401_403
+            404 -> s.geminiHttp404
+            429 -> s.geminiHttp429
+            in 500..599 -> s.geminiHttp5xx
+            else -> s.geminiHttpOther
         }
-        return "$hint (HTTP $code)" + (detail?.let { "：$it" } ?: "")
+        val sep = if (s.language == dev.xiaonuoboard.app.i18n.ResolvedLanguage.EN) ": " else "："
+        return "$hint (HTTP $code)" + (detail?.let { "$sep$it" } ?: "")
     }
 
     companion object {
