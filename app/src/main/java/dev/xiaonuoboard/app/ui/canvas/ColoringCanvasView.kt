@@ -414,6 +414,7 @@ class ColoringCanvasView(
             flushPenBurst()
         }
         OnyxEinkBridge.refreshHostUi(hostView, EinkMode.NORMAL)
+        OnyxEinkBridge.enablePost(this, 1)
         DiagLog.log(DiagLog.DRAW) { "chromeRefresh wasLive=$wasLive hadBurst=$hadBurst rawOpen=${raw.isOpen}" }
         if (raw.isOpen && raw.isEnabled && !raw.isRenderEnabled) {
             raw.schedulePenLayerResume()

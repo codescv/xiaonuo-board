@@ -4,6 +4,7 @@ import dev.xiaonuoboard.app.eink.RawDrawingGeometry
 import dev.xiaonuoboard.app.eink.TraceBounds
 import dev.xiaonuoboard.app.engine.BrushSize
 import dev.xiaonuoboard.app.engine.DirtyRect
+import dev.xiaonuoboard.app.engine.KaleidoPalette
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -66,42 +67,78 @@ class RawDrawingGeometryTest {
     }
 
     @Test
-    fun hardwarePreviewColorKeepsVividColorsBoostsPastelsAndWhitesOutEraser() {
+    fun hardwarePreviewColorSnapsNearBlackDarkensYellowAndPastelsAndWhitesOutEraser() {
         // Eraser always previews in white regardless of selected color.
         assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = true))
         assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = true))
 
-        // Vivid / dark colors (L <= 0.72) pass through unchanged (always opaque).
+        // Vivid dark / mid colors (lum <= 0.48) pass through unchanged (always opaque).
         assertEquals(0xFFE61919.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = false))
         assertEquals(0xFF0077B6.toInt(), RawDrawingGeometry.hardwarePreviewColor(0x000077B6, eraser = false))
+        assertEquals(0xFF38B000.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF38B000.toInt(), eraser = false))
         assertEquals(0xFF000000.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = false))
 
-        // Pale pastel yellow (#FCF7D4) is darkened & saturated so it shows up on Kaleido fast scribble.
+        // Near-black (KaleidoPalette black #111111, charcoal #222222) snaps to exact Color.BLACK
+        // (0xFF000000) so BOOX firmware takes the 300 PPI solid-black scribble path instead of gray.
+        assertEquals(0xFF000000.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF111111.toInt(), eraser = false))
+        assertEquals(0xFF000000.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF222222.toInt(), eraser = false))
+
+        // Vivid yellow (#FFD600) is darkened by perceived luminance (<= 0.37) with all channels < 128
+        // so it stays bold and visible on Kaleido Plus's fast scribble waveform.
+        val yellow = RawDrawingGeometry.hardwarePreviewColor(0xFFFFD600.toInt(), eraser = false)
+        assertEquals(0xFF, yellow ushr 24)
+        val yR = (yellow ushr 16) and 0xFF
+        val yG = (yellow ushr 8) and 0xFF
+        val yB = yellow and 0xFF
+        val yLum = (0.299f * yR + 0.587f * yG + 0.114f * yB) / 255f
+        assertTrue("yellow preview luminance <= 0.37 (got $yLum, rgb=$yR,$yG,$yB)", yLum <= 0.37f)
+        assertTrue("yellow preview keeps golden hue (R > G > B, got $yR,$yG,$yB)", yR > yG && yG > yB)
+        assertTrue("yellow preview darkens all channels < 128 for 1-bit CFA visibility (got $yR,$yG,$yB)", yR < 128 && yG < 128)
+
+        // Pale pastel yellow (#FCF7D4) is also darkened to luminance <= 0.37 and saturated >= 0.54.
         val paleYellow = RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false)
         assertEquals(0xFF, paleYellow ushr 24)
         val pyR = (paleYellow ushr 16) and 0xFF
         val pyG = (paleYellow ushr 8) and 0xFF
         val pyB = paleYellow and 0xFF
+        val pyLum = (0.299f * pyR + 0.587f * pyG + 0.114f * pyB) / 255f
         val pyMax = maxOf(pyR, pyG, pyB) / 255f
         val pyMin = minOf(pyR, pyG, pyB) / 255f
         val pySat = (pyMax - pyMin) / pyMax
-        assertTrue("value capped <= 0.73 (got $pyMax)", pyMax <= 0.73f)
+        assertTrue("luminance <= 0.37 (got $pyLum)", pyLum <= 0.37f)
         assertTrue("saturation boosted >= 0.54 (got $pySat)", pySat >= 0.54f)
         assertTrue("still yellow-ish (R >= G > B): $pyR,$pyG,$pyB", pyR >= pyG && pyG > pyB)
 
-        // Pale pink & pale cyan also get darkened and saturated while preserving dominant channel.
+        // Pale pink & pale cyan also get darkened by luminance while preserving dominant channel.
         val palePink = RawDrawingGeometry.hardwarePreviewColor(0xFFFFE0E8.toInt(), eraser = false)
-        assertTrue(((palePink ushr 16) and 0xFF) > ((palePink ushr 8) and 0xFF))
-        assertTrue(maxOf((palePink ushr 16) and 0xFF, (palePink ushr 8) and 0xFF, palePink and 0xFF) <= 185)
+        val ppR = (palePink ushr 16) and 0xFF
+        val ppG = (palePink ushr 8) and 0xFF
+        val ppB = palePink and 0xFF
+        val ppLum = (0.299f * ppR + 0.587f * ppG + 0.114f * ppB) / 255f
+        assertTrue("pale pink stays red-dominant (got $ppR,$ppG,$ppB)", ppR > ppG)
+        assertTrue("pale pink luminance <= 0.37 (got $ppLum)", ppLum <= 0.37f)
 
-        // Near-achromatic white / very light gray stays neutral gray with V <= 0.55 so it is visible on white paper.
-        val whitePreview = RawDrawingGeometry.hardwarePreviewColor(0xFFFFFFFF.toInt(), eraser = false)
-        val wR = (whitePreview ushr 16) and 0xFF
-        val wG = (whitePreview ushr 8) and 0xFF
-        val wB = whitePreview and 0xFF
-        assertEquals(0xFF, whitePreview ushr 24)
-        assertEquals(wR, wG)
-        assertEquals(wG, wB)
-        assertTrue("visible gray on white paper (got $wR)", wR in 120..145)
+        // White / light neutral gray snaps to OnyxPenDemo's DARK_GRAY (#404040) so it shows up clearly on white paper.
+        assertEquals(0xFF404040.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFFFFFFF.toInt(), eraser = false))
+        assertEquals(0xFF404040.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFCCCCCC.toInt(), eraser = false))
+    }
+
+    @Test
+    fun allKaleidoPaletteCrayonsProduceHighContrastHardwarePreview() {
+        for (crayon in KaleidoPalette.CRAYONS) {
+            val preview = RawDrawingGeometry.hardwarePreviewColor(crayon.argb, eraser = false)
+            assertEquals("opaque alpha for ${crayon.id}", 0xFF, preview ushr 24)
+            val r = (preview ushr 16) and 0xFF
+            val g = (preview ushr 8) and 0xFF
+            val b = preview and 0xFF
+            val lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255f
+            assertTrue("${crayon.id} preview lum <= 0.48 (got $lum, #${Integer.toHexString(preview)})", lum <= 0.48f)
+            if (r == g && g == b) {
+                assertTrue(
+                    "neutral ${crayon.id} must be exact Color.BLACK or DARK_GRAY (got #${Integer.toHexString(preview)})",
+                    preview == 0xFF000000.toInt() || preview == 0xFF404040.toInt(),
+                )
+            }
+        }
     }
 }

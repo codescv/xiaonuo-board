@@ -113,13 +113,18 @@ class OnyxTouchHelperBackend(
     private fun excludes(exclude: List<DirtyRect>) = RawDrawingGeometry.touchHelperExcludes(exclude).map { it.toRect() }
 
     override fun setEnabled(enabled: Boolean): Boolean = call("setRawDrawingEnabled") {
+        // Apply stroke before enabling (OnyxPenDemo order) and re-assert after because
+        // setRawDrawingEnabled(true) calls resetPenDefaultRawDrawing().
+        if (enabled) applyStroke(it)
         it.setRawDrawingEnabled(enabled)
-        // setRawDrawingEnabled(true) calls resetPenDefaultRawDrawing(): re-assert style → width → color.
         if (enabled) applyStroke(it)
     }
 
     override fun setRenderEnabled(enabled: Boolean): Boolean =
         call("setRawDrawingRenderEnabled") {
+            // Latch style → width → color before entering PEN_DRAWING (2) (matching OnyxPenDemo's
+            // PenManager) and re-assert after in case firmware resets attributes on resume.
+            if (enabled) applyStroke(it)
             it.setRawDrawingRenderEnabled(enabled)
             if (enabled) applyStroke(it)
         }
