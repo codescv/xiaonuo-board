@@ -67,47 +67,89 @@ class RawDrawingGeometryTest {
     }
 
     @Test
-    fun hardwarePreviewColorUsesSolidBlackForAllCrayonsAndWhiteForEraser() {
+    fun hardwarePreviewColorUsesBooxNotesVividPaletteAndWhiteForEraser() {
         // Eraser always previews in white regardless of selected color.
-        assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = true))
-        assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = true))
-        assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = true))
+        assertEquals(RawDrawingGeometry.HW_WHITE, RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = true))
+        assertEquals(RawDrawingGeometry.HW_WHITE, RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = true))
+        assertEquals(RawDrawingGeometry.HW_WHITE, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = true))
 
-        // Every crayon color — including Bluey dark navy (#3C3C6C), near-black (#111111),
-        // yellow (#FFD600 / #E4CC6C), pastel cream (#FCF7D4), bright red (#FC3C3C), and white —
-        // maps to exact Color.BLACK (0xFF000000) so Kaleido Plus fast hardware scribble drives all
-        // three RGB subpixels at 300 PPI full contrast until the 500 ms pen-up burst repaint.
-        val sampleColors = listOf(
-            0xFF000000.toInt(),
-            0xFF111111.toInt(),
-            0xFF3C3C6C.toInt(), // Bluey dark navy
-            0xFFE4CC6C.toInt(), // Bluey yellow
-            0xFF84E4FC.toInt(), // Bluey sky blue
-            0xFFFC3C3C.toInt(), // Bluey bright red
-            0xFFFC846C.toInt(), // Bluey coral
-            0xFFCCE4FC.toInt(), // Bluey pale blue
-            0xFFFFD600.toInt(), // Palette yellow
-            0xFFFCF7D4.toInt(), // Pastel cream
-            0x000077B6,         // Zero-alpha input
-            0xFFFFFFFF.toInt(), // White crayon
-        )
-        for (c in sampleColors) {
+        // Every verified BOOX Notes hardware color is an exact fixed point.
+        for (hw in RawDrawingGeometry.BOOX_HARDWARE_PALETTE) {
             assertEquals(
-                "crayon #${Integer.toHexString(c)} must preview in exact Color.BLACK",
-                0xFF000000.toInt(),
-                RawDrawingGeometry.hardwarePreviewColor(c, eraser = false),
+                "BOOX Notes color #${Integer.toHexString(hw)} must map to itself",
+                hw,
+                RawDrawingGeometry.hardwarePreviewColor(hw, eraser = false),
             )
+        }
+
+        // Problematic Bluey / Elsa / Kaleido colors map to vivid BOOX Notes hardware colors
+        // (never black-for-everything and never washed-out mid-tones).
+        assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF111111.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF8D99AE.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C24.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF24243C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFE4CC6C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFFD600.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF54CCFC.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_AQUA, RawDrawingGeometry.hardwarePreviewColor(0xFFCCE4FC.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC3C3C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_ORANGE_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC846C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_VIOLET, RawDrawingGeometry.hardwarePreviewColor(0xFFFC6CB4.toInt(), eraser = false))
+        // Zero-alpha input is still returned opaque in the matching vivid BOOX color.
+        assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0x000077B6, eraser = false))
+    }
+
+    @Test
+    fun allKaleidoPaletteCrayonsMapToVerifiedPureChromaBooxHardwareColors() {
+        val expected = mapOf(
+            "red" to RawDrawingGeometry.HW_RED,
+            "orange" to RawDrawingGeometry.HW_ORANGE_RED,
+            "yellow" to RawDrawingGeometry.HW_GOLD_YELLOW,
+            "apple_green" to RawDrawingGeometry.HW_GREEN,
+            "forest_green" to RawDrawingGeometry.HW_DARK_GREEN,
+            "sky_blue" to RawDrawingGeometry.HW_AQUA,
+            "ice_blue" to RawDrawingGeometry.HW_SKY_BLUE,
+            "royal_blue" to RawDrawingGeometry.HW_NAVY_BLUE,
+            "lavender" to RawDrawingGeometry.HW_VIOLET,
+            "magenta" to RawDrawingGeometry.HW_VIOLET,
+            "peppa_pink" to RawDrawingGeometry.HW_VIOLET,
+            "peach" to RawDrawingGeometry.HW_ORANGE_RED,
+            "caramel" to RawDrawingGeometry.HW_ORANGE_RED,
+            "warm_gray" to RawDrawingGeometry.HW_DARK_GRAY,
+            "black" to RawDrawingGeometry.HW_BLACK,
+            "white" to RawDrawingGeometry.HW_WHITE,
+        )
+        for (crayon in KaleidoPalette.CRAYONS) {
+            val mapped = RawDrawingGeometry.hardwarePreviewColor(crayon.argb, eraser = false)
+            assertTrue(
+                "${crayon.id} mapped to #${Integer.toHexString(mapped)} outside BOOX_HARDWARE_PALETTE",
+                mapped in RawDrawingGeometry.BOOX_HARDWARE_PALETTE,
+            )
+            assertEquals("${crayon.id} expected vivid BOOX color", expected[crayon.id], mapped)
         }
     }
 
     @Test
-    fun allKaleidoPaletteCrayonsProduceSolidBlackHardwarePreview() {
-        for (crayon in KaleidoPalette.CRAYONS) {
-            assertEquals(
-                "${crayon.id} must preview in exact Color.BLACK (0xFF000000)",
-                0xFF000000.toInt(),
-                RawDrawingGeometry.hardwarePreviewColor(crayon.argb, eraser = false),
-            )
+    fun booxHardwarePaletteGuaranteesFullAlphaAndPureChromaForAllChromaticColors() {
+        for (c in RawDrawingGeometry.BOOX_HARDWARE_PALETTE) {
+            assertEquals("must be fully opaque", 0xFF, (c ushr 24) and 0xFF)
+            val r = (c ushr 16) and 0xFF
+            val g = (c ushr 8) and 0xFF
+            val b = c and 0xFF
+            val isNeutral = r == g && g == b
+            if (!isNeutral) {
+                assertEquals(
+                    "chromatic BOOX color #${Integer.toHexString(c)} must have S=1.0 (min channel == 0)",
+                    0,
+                    minOf(r, g, b),
+                )
+                assertTrue(
+                    "chromatic BOOX color #${Integer.toHexString(c)} must have max channel >= 0x80",
+                    maxOf(r, g, b) >= 0x80,
+                )
+            }
         }
     }
 }

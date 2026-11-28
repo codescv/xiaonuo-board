@@ -451,11 +451,12 @@ class RawDrawingController(
     }
 
     /**
-     * A committed hardware-drawn stroke ended: debounce its colour refresh to the end of the burst
-     * ([PEN_UP_FLUSH_DELAY_MS] of pen idle). If nothing keeps the pen layer live (raw drawing off,
-     * layer hidden, finger gesture) there is no burst to wait for and [onPenUpFlush] fires at once.
+     * A committed hardware-drawn stroke ended: debounce its commit refresh to the end of the burst
+     * ([delayMs] of pen idle; defaults to [PEN_UP_FLUSH_DELAY_MS]). If nothing keeps the pen layer
+     * live (raw drawing off, layer hidden, finger gesture) there is no burst to wait for and
+     * [onPenUpFlush] fires at once.
      */
-    fun schedulePenUpFlush() {
+    fun schedulePenUpFlush(delayMs: Long = PEN_UP_FLUSH_DELAY_MS) {
         scheduler.cancel(penUpFlush)
         isPenUpFlushPending = true
         if (!isOpen || !isEnabled || !isRenderEnabled || isFingerGestureActive) {
@@ -463,7 +464,7 @@ class RawDrawingController(
             flushPenUpNow()
             return
         }
-        scheduler.postDelayed(penUpFlush, PEN_UP_FLUSH_DELAY_MS)
+        scheduler.postDelayed(penUpFlush, delayMs)
     }
 
     /** Ends a pending pen burst right now ([onPenUpFlush]); no-op without one. */
@@ -532,11 +533,34 @@ class RawDrawingController(
         /** Upper-bound resume delay for color devices / fallback. */
         const val RENDER_RESUME_FALLBACK_MS = COLOR_RESUME_DELAY_MS
         /**
-         * Pen idle before a burst of hardware-drawn strokes is committed to the `SurfaceView` in full
-         * color (matching Onyx `PenConstant.DEFAULT_PEN_UP_REFRESH_TIME_MS = 500`). Rapid consecutive
-         * strokes (<500 ms apart) cancel this timer so hardware raw drawing never pauses mid-burst;
-         * lifting the pen for 0.5 s automatically reveals the true Kaleido color and crisp outlines.
+         * Zero-pause pen-up refresh idle debounce on monochrome Android 12+ (`HAND_WRITING_REPAINT_MODE`,
+         * matching Onyx `PenConstant.DEFAULT_PEN_UP_REFRESH_TIME_MS = 500`).
          */
         const val PEN_UP_FLUSH_DELAY_MS = 500L
+        /**
+         * Color E-Ink / Android ≤ 11 free-coloring idle flush delay. Because the live hardware trace
+         * already draws directly in BOOX Notes' vivid color palette, holding `PEN_DRAWING` across
+         * pauses up to 2.5 s avoids mid-coloring EPD scheme switches, flashes, and 500 ms resume
+         * windows (matching BOOX Notes' one-hold-per-session UX), while still restoring 1-bit black
+         * outlines and exact pastel shades once the child stops to look at their work (or immediately
+         * on color/tool change, undo, zoom, or exit).
+         */
+        const val COLOR_BURST_IDLE_FLUSH_MS = 2500L
+        /** Color E-Ink idle flush when Stay-Inside-Lines is active (trims out-of-line stray ink). */
+        const val CLIP_BURST_IDLE_FLUSH_MS = 1200L
+        /** Color E-Ink idle flush for the eraser (restores black line art under the white trace). */
+        const val ERASER_BURST_IDLE_FLUSH_MS = 1000L
+
+        /** Chooses the pen-up burst flush debounce for the current device and tool mode (JVM-tested). */
+        fun penUpFlushDelayMs(
+            zeroPauseRepaint: Boolean,
+            eraser: Boolean,
+            stayInsideLines: Boolean,
+        ): Long = when {
+            zeroPauseRepaint -> PEN_UP_FLUSH_DELAY_MS
+            eraser -> ERASER_BURST_IDLE_FLUSH_MS
+            stayInsideLines -> CLIP_BURST_IDLE_FLUSH_MS
+            else -> COLOR_BURST_IDLE_FLUSH_MS
+        }
     }
 }

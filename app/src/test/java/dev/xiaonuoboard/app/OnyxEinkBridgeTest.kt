@@ -58,13 +58,20 @@ class OnyxEinkBridgeTest {
         assertFalse(OnyxEinkBridge.resetViewUpdateMode(v))
         assertFalse(OnyxEinkBridge.isColorEink)
         assertEquals(0, OnyxEinkBridge.handwritingRepaintMode)
+        assertEquals(0, OnyxEinkBridge.colorType)
+        assertEquals("-", OnyxEinkBridge.appScopeRefreshMode)
+        assertFalse(OnyxEinkBridge.hasDrawHandwritingBitmap)
         assertFalse(OnyxEinkBridge.shouldUseZeroPauseHandwritingRepaint)
         assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs)
         assertEquals(OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = true))
         assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = false))
         assertEquals(500L, OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS)
         assertEquals(150L, OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS)
-        assertTrue(OnyxEinkBridge.diagSummary().contains("hwRepaintMode=0"))
+        val diag = OnyxEinkBridge.diagSummary()
+        assertTrue(diag.contains("hwRepaintMode=0"))
+        assertTrue(diag.contains("colorType=0"))
+        assertTrue(diag.contains("appRefreshMode=-"))
+        assertTrue(diag.contains("drawHwBitmap=false"))
 
         var repaintRuns = 0
         OnyxEinkBridge.withHandwritingRepaint(v) { repaintRuns++ }

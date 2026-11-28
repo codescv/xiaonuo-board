@@ -955,4 +955,40 @@ class RawDrawingControllerTest {
         r.scheduler.runAll()
         assertTrue("resumed after stroke end settle", r.c.isRenderEnabled)
     }
+
+    @Test
+    fun penUpFlushDelayHoldsColorFreeColoringAcrossBurstsWithoutMidDrawingPause() {
+        // Zero-pause monochrome Android 12+ keeps snappy 500 ms debounce.
+        assertEquals(
+            RawDrawingController.PEN_UP_FLUSH_DELAY_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = true, eraser = false, stayInsideLines = false),
+        )
+        assertEquals(
+            RawDrawingController.PEN_UP_FLUSH_DELAY_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = true, eraser = true, stayInsideLines = true),
+        )
+        // Color E-Ink / Android ≤ 11: free coloring holds for 2.5 s idle (BOOX Notes feel),
+        // Stay-Inside-Lines commits after 1.2 s idle, eraser restores outlines after 1.0 s idle.
+        assertEquals(
+            RawDrawingController.COLOR_BURST_IDLE_FLUSH_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = false, eraser = false, stayInsideLines = false),
+        )
+        assertEquals(
+            RawDrawingController.CLIP_BURST_IDLE_FLUSH_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = false, eraser = false, stayInsideLines = true),
+        )
+        assertEquals(
+            RawDrawingController.ERASER_BURST_IDLE_FLUSH_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = false, eraser = true, stayInsideLines = false),
+        )
+        assertEquals(
+            RawDrawingController.ERASER_BURST_IDLE_FLUSH_MS,
+            RawDrawingController.penUpFlushDelayMs(zeroPauseRepaint = false, eraser = true, stayInsideLines = true),
+        )
+
+        val r = Rig(resumeDelay = { RawDrawingController.COLOR_RESUME_DELAY_MS }).armed()
+        r.c.schedulePenUpFlush(RawDrawingController.COLOR_BURST_IDLE_FLUSH_MS)
+        assertEquals(listOf(RawDrawingController.COLOR_BURST_IDLE_FLUSH_MS), r.scheduler.delays)
+        assertTrue(r.c.isPenUpFlushPending)
+    }
 }

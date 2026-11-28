@@ -71,6 +71,29 @@ internal object OnyxSdk {
         0
     }
 
+    /** Read-only probe for `Device.currentDevice().colorType` (diagnostics). */
+    fun probeColorType(): Int = try {
+        com.onyx.android.sdk.device.Device.currentDevice().colorType
+    } catch (_: Throwable) {
+        0
+    }
+
+    /** Read-only probe for the active BOOX app-scope refresh mode (diagnostics; never mutates). */
+    fun probeAppScopeRefreshMode(): String = try {
+        com.onyx.android.sdk.device.Device.currentDevice().appScopeRefreshMode?.name ?: "UNKNOWN"
+    } catch (_: Throwable) {
+        "UNKNOWN"
+    }
+
+    /** Read-only probe for `ViewUpdateHelper.drawScreenHandWritingBitmap(Bitmap, Point)` (diagnostics). */
+    fun probeDrawHandwritingBitmap(): Boolean = try {
+        val cls = Class.forName("android.onyx.ViewUpdateHelper")
+        cls.getMethod("drawScreenHandWritingBitmap", android.graphics.Bitmap::class.java, android.graphics.Point::class.java)
+        true
+    } catch (_: Throwable) {
+        false
+    }
+
     fun enablePost(view: View, enable: Int) = EpdController.enablePost(view, enable)
 
     fun enablePostGlobal(enable: Int) = EpdController.enablePost(enable)

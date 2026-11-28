@@ -114,6 +114,21 @@ object OnyxEinkBridge {
     var handwritingRepaintMode: Int = 0
         private set
 
+    /** Read-only BOOX `Device.colorType` probed at init (diagnostics). */
+    @Volatile
+    var colorType: Int = 0
+        private set
+
+    /** Read-only BOOX app-scope refresh mode (`UpdateOption`) probed at init (diagnostics). */
+    @Volatile
+    var appScopeRefreshMode: String = "-"
+        private set
+
+    /** Whether BOOX `ViewUpdateHelper.drawScreenHandWritingBitmap` exists on this firmware (diagnostics). */
+    @Volatile
+    var hasDrawHandwritingBitmap: Boolean = false
+        private set
+
     /**
      * Whether zero-pause `UpdateMode.HAND_WRITING_REPAINT_MODE` (posting onto the `SurfaceView`
      * while `PEN_DRAWING` remains active without calling `hidePenLayer()`) is safe and effective.
@@ -176,6 +191,9 @@ object OnyxEinkBridge {
         maxPressure = try { OnyxSdk.maxTouchPressure() } catch (_: Throwable) { 0f }
         isColorEink = try { OnyxSdk.isColorDevice() } catch (_: Throwable) { false }
         handwritingRepaintMode = try { OnyxSdk.probeHandwritingRepaintMode() } catch (_: Throwable) { 0 }
+        colorType = try { OnyxSdk.probeColorType() } catch (_: Throwable) { 0 }
+        appScopeRefreshMode = try { OnyxSdk.probeAppScopeRefreshMode() } catch (_: Throwable) { "UNKNOWN" }
+        hasDrawHandwritingBitmap = try { OnyxSdk.probeDrawHandwritingBitmap() } catch (_: Throwable) { false }
         touchHelperReady = try {
             Build.SUPPORTED_ABIS.orEmpty().contains("arm64-v8a") && OnyxSdk.hasStylus(app)
         } catch (t: Throwable) {
@@ -185,9 +203,10 @@ object OnyxEinkBridge {
         }
         DiagLog.log(
             DiagLog.ONYX,
-            "init ok: device=$deviceInfo color=$isColorEink hwRepaintMode=$handwritingRepaintMode " +
-                "zeroPauseRepaint=$shouldUseZeroPauseHandwritingRepaint penResumeDelayMs=$penResumeDelayMs " +
-                "touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure",
+            "init ok: device=$deviceInfo color=$isColorEink colorType=$colorType " +
+                "appRefreshMode=$appScopeRefreshMode hwRepaintMode=$handwritingRepaintMode " +
+                "drawHwBitmap=$hasDrawHandwritingBitmap zeroPauseRepaint=$shouldUseZeroPauseHandwritingRepaint " +
+                "penResumeDelayMs=$penResumeDelayMs touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure",
         )
     }
 
@@ -211,7 +230,10 @@ object OnyxEinkBridge {
         append("  sdk=").append(SDK_VERSIONS)
         append(" device=").append(deviceInfo ?: "-")
         append(" color=").append(isColorEink)
+        append(" colorType=").append(colorType)
+        append(" appRefreshMode=").append(appScopeRefreshMode)
         append(" hwRepaintMode=").append(handwritingRepaintMode)
+        append(" drawHwBitmap=").append(hasDrawHandwritingBitmap)
         append(" maxTouchPressure=").append(maxPressure).append('\n')
         append("  initFailure=").append(failure ?: "-")
         append(" rawDrawingFailure=").append(rawDrawingFailure ?: "-")

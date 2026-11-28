@@ -50,16 +50,17 @@ import kotlin.math.floor
  *     - Stylus MotionEvents are suppressed in [dispatchTouchEvent] while raw drawing is armed so
  *       there is no duplicate 240 Hz input race (while still feeding 3-miss self-healing).
  *     - Live strokes draw directly via BOOX EPD firmware (`hwPreview = true`) using solid
- *       constant-width `STROKE_STYLE_PENCIL` in exact `Color.BLACK` (`0xFF000000`, eraser white)
- *       so every crayon color (including yellow, pastels, and dark navy) has bold 300 PPI
- *       zero-latency visibility even at light child pressure.
- *     - After [RawDrawingController.PEN_UP_FLUSH_DELAY_MS] (500 ms) of pen idle, [flushPenBurst]
- *       commits the burst rect onto the `SurfaceView`. On Kaleido color E-Ink and Android ≤ 11
- *       (where `HAND_WRITING_REPAINT_MODE` is silently swallowed while `PEN_DRAWING` freezes
- *       SurfaceFlinger), it hides the pen layer, pushes a crisp partial `NORMAL` (`GU`) color
- *       repaint via [OnyxEinkBridge.withForcedPost], and resumes after
- *       [OnyxEinkBridge.penResumeDelayMs] (500 ms color / 150 ms mono); monochrome Android 12+
- *       devices with a valid `HAND_WRITING_REPAINT_MODE` constant use zero-pause repaint.
+ *       constant-width `STROKE_STYLE_PENCIL` mapped onto BOOX built-in Notes' proven vivid Kaleido
+ *       hardware palette ([RawDrawingGeometry.hardwarePreviewColor]; eraser white) so every crayon
+ *       renders immediately in bold, zero-latency real color even at light child pressure.
+ *     - On Kaleido color E-Ink and Android ≤ 11 (where `HAND_WRITING_REPAINT_MODE` is silently
+ *       swallowed while `PEN_DRAWING` freezes SurfaceFlinger), `PEN_DRAWING` stays continuously
+ *       held across active strokes (2.5 s idle in free coloring / 1.2 s with Stay-Inside-Lines /
+ *       1.0 s eraser, or immediately at natural breaks like switching color/tool, undo, zoom, or
+ *       exit) — matching BOOX Notes' smooth one-hold-per-session feel with zero mid-drawing
+ *       flashes — before [flushPenBurst] cleanly commits exact pastel shades, Stay-Inside-Lines
+ *       clipping, and 1-bit black line art via [OnyxEinkBridge.withForcedPost]. Monochrome Android
+ *       12+ devices with a valid `HAND_WRITING_REPAINT_MODE` constant use 500 ms zero-pause repaint.
  *     - Structural updates (undo, reset, fill, clearGhosting, ghost toggle, zoom/pan, cancelled
  *       stroke) hide the pen layer, push the update via [OnyxEinkBridge.withForcedPost], and resume
  *       after [OnyxEinkBridge.penResumeDelayMs].
@@ -370,8 +371,8 @@ class ColoringCanvasView(
         currentTool = tool
         currentColor = color
         if (colorChanged && !penBurst.isEmpty) {
-            // Hardware preview uses solid black for all crayons; still flush any pending burst
-            // immediately when the user switches logical crayon color.
+            // Even when two shades share the same BOOX hardware preview hue, flush any pending
+            // burst immediately when the user switches logical crayon color (natural break).
             raw.flushPenUpNow()
         }
         raw.setStroke(
@@ -817,8 +818,14 @@ class ColoringCanvasView(
             flushPenBurst()
             raw.schedulePenLayerResume()
         } else {
-            // Keep the pen layer live across rapid strokes; commit the burst in real color after 500 ms idle.
-            raw.schedulePenUpFlush()
+            // Keep the pen layer continuously live across strokes (like BOOX Notes); commit the
+            // exact pastel shade, Stay-Inside-Lines clip, and 1-bit line art on idle or at breaks.
+            val delayMs = RawDrawingController.penUpFlushDelayMs(
+                zeroPauseRepaint = OnyxEinkBridge.shouldUseZeroPauseHandwritingRepaint,
+                eraser = currentTool == Tool.ERASER,
+                stayInsideLines = controller.stayInsideLines,
+            )
+            raw.schedulePenUpFlush(delayMs)
         }
     }
 
