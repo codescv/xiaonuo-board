@@ -44,6 +44,10 @@ class OnyxTouchHelperBackend(
     private var helper: TouchHelper? = null
     /** Bumped on every open / close; events tagged with an older session are dropped. */
     private var session = 0
+    /** Last stroke config: re-applied after every enable / render-enable (which resets pen defaults). */
+    private var lastWidth = 1f
+    private var lastColor = 0xFF000000.toInt()
+    private var lastPressureSensitive = false
 
     private inline fun call(name: String, block: (TouchHelper) -> Unit): Boolean {
         val h = helper ?: return false
@@ -57,6 +61,13 @@ class OnyxTouchHelperBackend(
         }
     }
 
+    /** Applies stroke style → width → color in strict order (Onyx resets defaults on enable). */
+    private fun applyStroke(h: TouchHelper) {
+        h.setStrokeStyle(strokeStyle(lastPressureSensitive))
+        h.setStrokeWidth(lastWidth)
+        h.setStrokeColor(lastColor)
+    }
+
     override fun open(
         limit: DirtyRect,
         exclude: List<DirtyRect>,
@@ -65,21 +76,21 @@ class OnyxTouchHelperBackend(
         pressureSensitive: Boolean,
     ): Boolean {
         close()
+        lastWidth = strokeWidth
+        lastColor = strokeColor
+        lastPressureSensitive = pressureSensitive
         val t0 = System.nanoTime()
         return try {
             val h = TouchHelper.create(view, Callback(++session))
             helper = h
-            h.setStrokeWidth(strokeWidth)
             h.setLimitRect(limit.toRect(), excludes(exclude))
             h.openRawDrawing()
-            // openRawDrawing() resets the (firmware-global) style to PENCIL: set ours afterwards.
-            h.setStrokeStyle(strokeStyle(pressureSensitive))
-            h.setStrokeColor(strokeColor)
             // Deprecated in 1.5.9 but still honoured (RawInputReader.onPenUpRefresh checks the flag);
             // it only schedules a no-op onPenUpRefresh callback, the canvas refreshes itself.
             @Suppress("DEPRECATION")
             h.setPenUpRefreshEnabled(false)
             h.forceSetRawDrawingEnabled(false)
+            applyStroke(h)
             DiagLog.log(DiagLog.TOUCH) {
                 "open ok session=$session limit=$limit excludes=${exclude.size} width=$strokeWidth " +
                     "color=#${Integer.toHexString(strokeColor)} style=${styleName(pressureSensitive)} in ${DiagLog.ms(System.nanoTime() - t0)}ms"
@@ -101,16 +112,26 @@ class OnyxTouchHelperBackend(
 
     private fun excludes(exclude: List<DirtyRect>) = RawDrawingGeometry.touchHelperExcludes(exclude).map { it.toRect() }
 
-    override fun setEnabled(enabled: Boolean): Boolean = call("setRawDrawingEnabled") { it.setRawDrawingEnabled(enabled) }
+    override fun setEnabled(enabled: Boolean): Boolean = call("setRawDrawingEnabled") {
+        it.setRawDrawingEnabled(enabled)
+        // setRawDrawingEnabled(true) calls resetPenDefaultRawDrawing(): re-assert style → width → color.
+        if (enabled) applyStroke(it)
+    }
 
     override fun setRenderEnabled(enabled: Boolean): Boolean =
-        call("setRawDrawingRenderEnabled") { it.setRawDrawingRenderEnabled(enabled) }
+        call("setRawDrawingRenderEnabled") {
+            it.setRawDrawingRenderEnabled(enabled)
+            if (enabled) applyStroke(it)
+        }
 
-    override fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean = call("setStroke") {
-        it.setStrokeWidth(width)
-        it.setStrokeStyle(strokeStyle(pressureSensitive))
-        it.setStrokeColor(color)
-        DiagLog.log(DiagLog.TOUCH) { "setStroke width=$width color=#${Integer.toHexString(color)} style=${styleName(pressureSensitive)}" }
+    override fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean {
+        lastWidth = width
+        lastColor = color
+        lastPressureSensitive = pressureSensitive
+        return call("setStroke") {
+            applyStroke(it)
+            DiagLog.log(DiagLog.TOUCH) { "setStroke width=$width color=#${Integer.toHexString(color)} style=${styleName(pressureSensitive)}" }
+        }
     }
 
     override fun close() {

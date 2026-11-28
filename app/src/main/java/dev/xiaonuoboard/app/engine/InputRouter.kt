@@ -66,10 +66,12 @@ class InputRouter(
 
     fun down(id: Int, kind: PointerKind, x: Float, y: Float, touchMajor: Float = 0f, pressure: Float = StrokePressure.NO_PRESSURE, time: Long = 0L) {
         val pen = isPen(kind)
+        // Check BEFORE inserting into pointers so a duplicate pen pointer never leaves a stale
+        // entry in `pointers` (which would otherwise force Mode.IGNORE on lift).
+        if (pen && mode == Mode.STROKE && activeIsPen) return
         val palm = !pen && kind == PointerKind.FINGER && touchMajor > palmTouchMajor
         pointers[id] = P(kind, x, y, palm)
         if (pen) {
-            if (mode == Mode.STROKE && activeIsPen) return // second pen pointer: impossible on EMR, ignore
             abortCurrent()
             beginPrimary(id, kind, x, y, pressure, time, isPenPointer = true)
             return

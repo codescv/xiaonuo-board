@@ -100,12 +100,17 @@ class RawDrawingController(
     private val sink: RawStrokeSink,
     private val scheduler: UiScheduler,
     private val onFailure: (String) -> Unit = {},
-    /** The pen burst is over (or must end now): hide the pen layer and refresh its strokes once. */
+    /** The pen burst is over (or must end now): repaint its strokes onto the surface (zero-pause via HAND_WRITING_REPAINT_MODE). */
     private val onPenUpFlush: () -> Unit = {},
+    /** Delay before re-enabling the hardware pen layer after a structural `hidePenLayer()` refresh (500ms color / 150ms mono). */
+    private val resumeDelayMs: () -> Long = { RENDER_RESUME_DELAY_MS },
+    /** When true (SurfaceView host), raw drawing only opens once [setSurfaceValid] is true. */
+    requireSurface: Boolean = false,
 ) : RawPenListener {
 
     // ---- inputs ----
     private var attached = false
+    private var surfaceValid = !requireSurface
     private var windowFocused = false
     private var visible = false
     private var hostResumed = true
@@ -143,6 +148,8 @@ class RawDrawingController(
 
     private var penStrokeOpen = false
     private var rawSeenInPenStroke = false
+    private var motionPenOpen = false
+    private var rawSeenInMotionPen = false
     var consecutiveMisses = 0
         private set
     /** TouchHelper has delivered at least one raw stroke since this controller was created. */
@@ -171,6 +178,8 @@ class RawDrawingController(
     // ---------------- inputs ----------------
 
     fun setAttached(value: Boolean) { attached = value; update() }
+    /** For a `SurfaceView` host: true once `surfaceCreated` ran, false in `surfaceDestroyed`. */
+    fun setSurfaceValid(value: Boolean) { surfaceValid = value; update() }
     fun setWindowFocused(value: Boolean) { windowFocused = value; update() }
     fun setVisible(value: Boolean) { visible = value; update() }
     fun setHostResumed(value: Boolean) { hostResumed = value; update() }
@@ -225,7 +234,7 @@ class RawDrawingController(
     // ---------------- state machine ----------------
 
     private fun update() {
-        val wantOpen = !released && !isFailed && attached && !limit.isEmpty && available()
+        val wantOpen = !released && !isFailed && attached && surfaceValid && !limit.isEmpty && available()
         if (!wantOpen) {
             if (isOpen) closeBackend()
             return
@@ -270,6 +279,8 @@ class RawDrawingController(
         isRenderEnabled = false
         reanchorPending = false
         penStrokeOpen = false
+        motionPenOpen = false
+        rawSeenInMotionPen = false
         isFingerGestureActive = false
         backend?.close()
         publishState()
@@ -346,13 +357,17 @@ class RawDrawingController(
         isFingerGestureActive = false // pen priority: the router aborts any finger gesture
         scheduler.cancel(penUpFlush) // same burst: keep the pen layer, refresh at the burst's end
         lastBeginRenderWasEnabled = isRenderEnabled
-        resumeRenderNow()
-        if (!isEnabled) return // resuming the pen layer failed → raw drawing shut down
+        // If the pen layer is currently hidden (e.g. during a 500ms undo/fill/resize settle window),
+        // do NOT re-enable it mid-stroke: that would interrupt the in-flight EPD waveform and draw
+        // unclipped firmware traces while the canvas runs software preview. Cancel any pending resume
+        // so render stays off for this single stroke, and schedule resume cleanly after pen-up.
+        if (!isRenderEnabled) scheduler.cancel(resumeRender)
         rawEverDelivered = true
         consecutiveMisses = 0
         isRawStrokeActive = true
         movesInStroke = 0
         if (penStrokeOpen) rawSeenInPenStroke = true
+        if (motionPenOpen) rawSeenInMotionPen = true
         sink.rawStrokeBegin(x, y, pressure, time, erasing)
     }
 
@@ -373,7 +388,12 @@ class RawDrawingController(
         if (!isRawStrokeActive) return
         isRawStrokeActive = false
         sink.rawStrokeEnd(x, y, pressure, time)
-        if (reanchorPending && isEnabled) reanchor()
+        if (reanchorPending && isEnabled) {
+            reanchor()
+        } else if (isOpen && isEnabled && !isRenderEnabled && !isFingerGestureActive) {
+            // Stroke ran in software mode while the pen layer was paused: resume after settle.
+            schedulePenLayerResume()
+        }
     }
 
     // ---------------- canvas handshake ----------------
@@ -384,13 +404,16 @@ class RawDrawingController(
         rawSeenInPenStroke = isRawStrokeActive
         isFingerGestureActive = false
         scheduler.cancel(penUpFlush)
-        resumeRenderNow()
+        if (!isRenderEnabled) scheduler.cancel(resumeRender)
     }
 
     /** A pen stroke ended; counts strokes TouchHelper never reported (see class doc). */
     fun onPenStrokeEnd(cancelled: Boolean) {
         if (!penStrokeOpen) return
         penStrokeOpen = false
+        if (isOpen && isEnabled && !isRenderEnabled && !isFingerGestureActive) {
+            schedulePenLayerResume()
+        }
         if (cancelled || !isEnabled) return
         if (rawSeenInPenStroke || rawEverDelivered) {
             consecutiveMisses = 0
@@ -399,6 +422,31 @@ class RawDrawingController(
             fail(AppI18n.strings().booxTouchHelperMissedStrokes(MAX_MISSES))
         } else {
             DiagLog.log(DiagLog.RAW) { "miss $consecutiveMisses/$MAX_MISSES (MotionEvent-only pen stroke)" }
+        }
+    }
+
+    /**
+     * Tracks suppressed stylus MotionEvents while raw drawing is enabled so the [MAX_MISSES]
+     * self-healing fallback still triggers if TouchHelper never delivers any raw events.
+     * No-op once [rawEverDelivered] is true.
+     */
+    fun onMotionPenObserved(down: Boolean, cancelled: Boolean = false) {
+        if (down) {
+            if (!isEnabled || rawEverDelivered) return
+            motionPenOpen = true
+            rawSeenInMotionPen = isRawStrokeActive
+            return
+        }
+        if (!motionPenOpen) return
+        motionPenOpen = false
+        if (cancelled || !isEnabled) return
+        if (rawSeenInMotionPen || rawEverDelivered) {
+            consecutiveMisses = 0
+        } else if (++consecutiveMisses >= MAX_MISSES) {
+            DiagLog.log(DiagLog.RAW, "$MAX_MISSES-miss fallback: suppressed stylus MotionEvents saw no raw callbacks")
+            fail(AppI18n.strings().booxTouchHelperMissedStrokes(MAX_MISSES))
+        } else {
+            DiagLog.log(DiagLog.RAW) { "miss $consecutiveMisses/$MAX_MISSES (suppressed stylus MotionEvent, no raw callback)" }
         }
     }
 
@@ -443,10 +491,11 @@ class RawDrawingController(
     }
 
     /**
-     * The app refresh was issued: bring the hardware pen layer back after [delayMs] (by default
-     * ≈2 frames after the refresh's frame was drawn, so it reaches the EPD before scribble resumes).
+     * The structural app refresh was issued: bring the hardware pen layer back after [delayMs]
+     * (defaults to [resumeDelayMs]: 500 ms on color Kaleido BOOX, 150 ms on monochrome, so the EPD
+     * waveform finishes cleanly before SurfaceFlinger re-enters `PEN_DRAWING`).
      */
-    fun schedulePenLayerResume(delayMs: Long = RENDER_RESUME_DELAY_MS) {
+    fun schedulePenLayerResume(delayMs: Long = resumeDelayMs()) {
         scheduler.cancel(resumeRender) // at most one pending resume, always the latest
         if (isFingerGestureActive) return // resumed when the gesture ends
         if (isOpen && isEnabled && !isRenderEnabled) scheduler.postDelayed(resumeRender, delayMs)
@@ -474,15 +523,19 @@ class RawDrawingController(
 
     companion object {
         const val MAX_MISSES = 3
-        /** ≈1 frame: lets the post-stroke partial refresh reach the EPD while minimizing the resume gap. */
-        const val RENDER_RESUME_DELAY_MS = 16L
-        /** Resume fallback when the refresh's frame-drawn signal never comes (e.g. no draw happened). */
-        const val RENDER_RESUME_FALLBACK_MS = 120L
+        /** Kaleido color E-Ink settle time (`NoteConstant.COLOR_DEVICE_PEN_RESUME_DELAY_TIME_MS`). */
+        const val COLOR_RESUME_DELAY_MS = 500L
+        /** Monochrome E-Ink settle time (`NoteConstant.COMMON_PEN_RESUME_DELAY_TIME_MS`). */
+        const val MONO_RESUME_DELAY_MS = 150L
+        /** Default pen-layer resume delay after a structural `hidePenLayer()` refresh (never 16 ms!). */
+        const val RENDER_RESUME_DELAY_MS = MONO_RESUME_DELAY_MS
+        /** Upper-bound resume delay for color devices / fallback. */
+        const val RENDER_RESUME_FALLBACK_MS = COLOR_RESUME_DELAY_MS
         /**
-         * Pen idle before a burst of hardware-drawn strokes gets its single colour refresh. Kids'
-         * back-and-forth coloring lifts the pen for ~50–500 ms; 700 ms keeps the hardware pen layer
-         * live across bursts without colliding with mid-burst GU waveforms.
+         * Pen idle before a burst of hardware-drawn strokes gets its zero-pause `HAND_WRITING_REPAINT_MODE`
+         * colour repaint onto the SurfaceView. Because the repaint never hides the pen layer, 300 ms
+         * settles strokes snappily with real color, region clipping, and crisp black lines.
          */
-        const val PEN_UP_FLUSH_DELAY_MS = 700L
+        const val PEN_UP_FLUSH_DELAY_MS = 300L
     }
 }

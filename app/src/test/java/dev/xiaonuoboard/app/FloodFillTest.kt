@@ -1,6 +1,7 @@
 package dev.xiaonuoboard.app
 
 import dev.xiaonuoboard.app.engine.ColoringCanvasController
+import dev.xiaonuoboard.app.engine.CrayonBrush
 import dev.xiaonuoboard.app.engine.FloodFill
 import dev.xiaonuoboard.app.engine.RegionMap
 import dev.xiaonuoboard.app.engine.RegionMapEngine
@@ -84,5 +85,31 @@ class FloodFillTest {
         assertEquals(1, c.undoStack.size)
         c.undo()
         assertEquals(0, c.paint[40 * w + 30])
+    }
+
+    @Test
+    fun crayonBrushCoalescesMicroMovesWithoutDroppingCumulativeMotionOrPressureChange() {
+        val (ink, w, h) = TestArt.twoBoxes()
+        val map = RegionMapEngine.build(ink, w, h, closeRadius = 0)
+        val paint = IntArray(w * h)
+        val brush = CrayonBrush(map, paint).apply { radius = 6f; color = red }
+        var captures = 0
+        brush.begin(30f, 40f, stayInside = false, beforeWrite = { captures++ })
+        assertEquals(1, captures)
+
+        // Micro-moves < 1.25px with same radius skip redundant stamping.
+        assertTrue(brush.moveTo(30.4f, 40.2f) { captures++ }.isEmpty)
+        assertTrue(brush.moveTo(30.9f, 40.3f) { captures++ }.isEmpty)
+        assertEquals(1, captures)
+
+        // Cumulative distance from (30,40) reaches >= 1.25px → stamps cleanly from last stamped point.
+        assertTrue(!brush.moveTo(31.5f, 40.3f) { captures++ }.isEmpty)
+        assertEquals(2, captures)
+
+        // Micro-move with radius change >= 0.5px stamps immediately (pressure variation in place).
+        brush.radius = 7f
+        assertTrue(!brush.moveTo(31.6f, 40.3f) { captures++ }.isEmpty)
+        assertEquals(3, captures)
+        brush.end()
     }
 }

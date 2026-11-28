@@ -184,6 +184,8 @@ class InputRouterTest {
         r.move(RAW, 30f, 35f)
         r.move(0, 75f, 35f) // even a diverging duplicate cannot paint
         r.up(RAW, 30f, 35f)
+        // Duplicate pen down must NEVER have entered `pointers`: lifting RAW immediately returns to IDLE (not IGNORE).
+        assertEquals(Mode.IDLE, r.mode)
         r.up(0, 75f, 35f)
         assertEquals(1, rec.strokeStarts)
         assertEquals(1, rec.strokeEnds)
@@ -204,6 +206,24 @@ class InputRouterTest {
         assertEquals(red, c.paint[35 * c.width + 30])
         assertEquals("only the finger stroke was rolled back", 1, rec.cancelled)
         assertEquals(Mode.IDLE, r.mode)
+    }
+
+    @Test
+    fun palmFirstThenStylusCancelAllExceptRawReturnsToIdleOnRawLift() {
+        val (c, r, rec) = setup()
+        r.down(0, PointerKind.FINGER, 70f, 40f) // palm starts finger stroke / pan
+        r.move(0, 72f, 42f)
+        // dispatchTouchEvent sees stylus ACTION_POINTER_DOWN and cleans up non-raw pointers
+        // BEFORE or AFTER onRawBegin arrives; lifting RAW must return straight to IDLE (not IGNORE).
+        r.cancelAllExcept(RAW)
+        assertEquals(Mode.IDLE, r.mode)
+        r.down(RAW, PointerKind.STYLUS, 25f, 30f)
+        r.move(RAW, 30f, 35f)
+        r.up(RAW, 30f, 35f)
+        assertEquals(Mode.IDLE, r.mode)
+        assertEquals(red, c.paint[35 * c.width + 30])
+        assertEquals("palm stroke rolled back", 0, c.paint[42 * c.width + 72])
+        assertEquals(1, rec.cancelled)
     }
 
     @Test

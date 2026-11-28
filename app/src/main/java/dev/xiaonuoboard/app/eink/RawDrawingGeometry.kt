@@ -45,7 +45,71 @@ object RawDrawingGeometry {
         brushRadius * (if (eraser) ERASER_SCALE else 1f) * 2f * viewScale *
             (if (pressureSensitive && !eraser) StrokePressure.MAX_MULT else 1f)
 
+    /**
+     * Color sent to the BOOX firmware hardware scribble layer.
+     *
+     * Pale / pastel colors (e.g. `#FCF7D4`) vanish on Kaleido Plus's fast scribble waveform while
+     * drawing. For perceived luminance > 0.72, darken V (`<= 0.72`) and boost saturation (`>= 0.55`,
+     * or for near-achromatic grays `S < 0.08`, cap `V <= 0.55` without inventing hue) so the live
+     * hardware trace stays visible; pen-up burst repaint replaces it with the exact true color.
+     */
+    fun hardwarePreviewColor(argb: Int, eraser: Boolean): Int {
+        if (eraser) return 0xFFFFFFFF.toInt()
+        val r = (argb ushr 16) and 0xFF
+        val g = (argb ushr 8) and 0xFF
+        val b = argb and 0xFF
+        val lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255f
+        if (lum <= PREVIEW_MAX_LUM) return argb or (0xFF shl 24)
+
+        val rf = r / 255f
+        val gf = g / 255f
+        val bf = b / 255f
+        val maxC = maxOf(rf, gf, bf)
+        val minC = minOf(rf, gf, bf)
+        val delta = maxC - minC
+
+        val v = maxC
+        val s = if (maxC == 0f) 0f else delta / maxC
+        val h = when {
+            delta == 0f -> 0f
+            maxC == rf -> 60f * (((gf - bf) / delta) % 6f)
+            maxC == gf -> 60f * (((bf - rf) / delta) + 2f)
+            else -> 60f * (((rf - gf) / delta) + 4f)
+        }.let { if (it < 0f) it + 360f else it }
+
+        val newS: Float
+        val newV: Float
+        if (s < PREVIEW_GRAY_SAT) {
+            newS = s
+            newV = minOf(v, PREVIEW_GRAY_MAX_V)
+        } else {
+            newS = maxOf(s, PREVIEW_MIN_SAT)
+            newV = minOf(v, PREVIEW_MAX_V)
+        }
+
+        val c = newV * newS
+        val x = c * (1f - kotlin.math.abs((h / 60f) % 2f - 1f))
+        val m = newV - c
+        val (r1, g1, b1) = when {
+            h < 60f -> Triple(c, x, 0f)
+            h < 120f -> Triple(x, c, 0f)
+            h < 180f -> Triple(0f, c, x)
+            h < 240f -> Triple(0f, x, c)
+            h < 300f -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+        val nr = kotlin.math.round((r1 + m) * 255f).toInt().coerceIn(0, 255)
+        val ng = kotlin.math.round((g1 + m) * 255f).toInt().coerceIn(0, 255)
+        val nb = kotlin.math.round((b1 + m) * 255f).toInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (nr shl 16) or (ng shl 8) or nb
+    }
+
     const val ERASER_SCALE = 1.5f
+    private const val PREVIEW_MAX_LUM = 0.72f
+    private const val PREVIEW_MAX_V = 0.72f
+    private const val PREVIEW_MIN_SAT = 0.55f
+    private const val PREVIEW_GRAY_SAT = 0.08f
+    private const val PREVIEW_GRAY_MAX_V = 0.55f
 }
 
 /**

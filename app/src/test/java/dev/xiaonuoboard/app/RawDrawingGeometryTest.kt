@@ -64,4 +64,44 @@ class RawDrawingGeometryTest {
         val one = listOf(DirtyRect(1, 2, 3, 4))
         assertEquals(one, RawDrawingGeometry.touchHelperExcludes(one))
     }
+
+    @Test
+    fun hardwarePreviewColorKeepsVividColorsBoostsPastelsAndWhitesOutEraser() {
+        // Eraser always previews in white regardless of selected color.
+        assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = true))
+        assertEquals(0xFFFFFFFF.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = true))
+
+        // Vivid / dark colors (L <= 0.72) pass through unchanged (always opaque).
+        assertEquals(0xFFE61919.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFFE61919.toInt(), eraser = false))
+        assertEquals(0xFF0077B6.toInt(), RawDrawingGeometry.hardwarePreviewColor(0x000077B6, eraser = false))
+        assertEquals(0xFF000000.toInt(), RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = false))
+
+        // Pale pastel yellow (#FCF7D4) is darkened & saturated so it shows up on Kaleido fast scribble.
+        val paleYellow = RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false)
+        assertEquals(0xFF, paleYellow ushr 24)
+        val pyR = (paleYellow ushr 16) and 0xFF
+        val pyG = (paleYellow ushr 8) and 0xFF
+        val pyB = paleYellow and 0xFF
+        val pyMax = maxOf(pyR, pyG, pyB) / 255f
+        val pyMin = minOf(pyR, pyG, pyB) / 255f
+        val pySat = (pyMax - pyMin) / pyMax
+        assertTrue("value capped <= 0.73 (got $pyMax)", pyMax <= 0.73f)
+        assertTrue("saturation boosted >= 0.54 (got $pySat)", pySat >= 0.54f)
+        assertTrue("still yellow-ish (R >= G > B): $pyR,$pyG,$pyB", pyR >= pyG && pyG > pyB)
+
+        // Pale pink & pale cyan also get darkened and saturated while preserving dominant channel.
+        val palePink = RawDrawingGeometry.hardwarePreviewColor(0xFFFFE0E8.toInt(), eraser = false)
+        assertTrue(((palePink ushr 16) and 0xFF) > ((palePink ushr 8) and 0xFF))
+        assertTrue(maxOf((palePink ushr 16) and 0xFF, (palePink ushr 8) and 0xFF, palePink and 0xFF) <= 185)
+
+        // Near-achromatic white / very light gray stays neutral gray with V <= 0.55 so it is visible on white paper.
+        val whitePreview = RawDrawingGeometry.hardwarePreviewColor(0xFFFFFFFF.toInt(), eraser = false)
+        val wR = (whitePreview ushr 16) and 0xFF
+        val wG = (whitePreview ushr 8) and 0xFF
+        val wB = whitePreview and 0xFF
+        assertEquals(0xFF, whitePreview ushr 24)
+        assertEquals(wR, wG)
+        assertEquals(wG, wB)
+        assertTrue("visible gray on white paper (got $wR)", wR in 120..145)
+    }
 }

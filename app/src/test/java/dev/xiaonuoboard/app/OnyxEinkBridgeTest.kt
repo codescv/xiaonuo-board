@@ -53,6 +53,30 @@ class OnyxEinkBridgeTest {
 
         val v = CountingView()
         assertFalse(OnyxEinkBridge.setViewDefaultMode(v, EinkMode.REGAL))
+        assertFalse(OnyxEinkBridge.enablePost(v, 1))
+        assertFalse(OnyxEinkBridge.resetViewUpdateMode(v))
+        assertFalse(OnyxEinkBridge.isColorEink)
+        assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs)
+        assertEquals(OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = true))
+        assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = false))
+        assertEquals(500L, OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS)
+        assertEquals(150L, OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS)
+
+        var repaintRuns = 0
+        OnyxEinkBridge.withHandwritingRepaint(v) { repaintRuns++ }
+        assertEquals(1, repaintRuns)
+        var forcedPostRuns = 0
+        OnyxEinkBridge.withForcedPost(v, EinkMode.NORMAL, forceUnfreeze = false) { forcedPostRuns++ }
+        OnyxEinkBridge.withForcedPost(v, EinkMode.NORMAL, forceUnfreeze = true) { forcedPostRuns++ }
+        OnyxEinkBridge.withForcedPost(v, mode = null, forceUnfreeze = true) { forcedPostRuns++ }
+        assertEquals(3, forcedPostRuns)
+        assertFalse(OnyxEinkBridge.repaintEverything(EinkMode.FULL))
+
+        assertFalse(OnyxEinkBridge.enterFastStroke())
+        assertFalse(OnyxEinkBridge.isInFastStroke)
+        assertFalse(OnyxEinkBridge.exitFastStroke(refresh = false))
+        assertFalse(OnyxEinkBridge.isInFastStroke)
+
         OnyxEinkBridge.refresh(v, EinkMode.FAST)
         OnyxEinkBridge.refreshRect(v, 1, 2, 30, 40, EinkMode.NORMAL)
         OnyxEinkBridge.refreshRect(v, Rect(), EinkMode.NORMAL)

@@ -7,6 +7,7 @@ import com.onyx.android.sdk.api.device.epd.EpdController
 import com.onyx.android.sdk.api.device.epd.UpdateMode
 import com.onyx.android.sdk.rx.RxBaseAction
 import com.onyx.android.sdk.utils.DeviceFeatureUtil
+import com.onyx.android.sdk.utils.DeviceInfoUtil
 import com.onyx.android.sdk.utils.ResManager
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
@@ -55,6 +56,22 @@ internal object OnyxSdk {
      * onyxsdk-pen 1.5.9 ships for arm64-v8a only.
      */
     fun hasStylus(context: Context): Boolean = DeviceFeatureUtil.hasStylus(context)
+
+    /** True on Kaleido / color E-Ink BOOX hardware (requires longer pen-layer resume settle). */
+    fun isColorDevice(): Boolean = DeviceInfoUtil.isColorDevice()
+
+    fun enablePost(view: View, enable: Int) = EpdController.enablePost(view, enable)
+
+    fun enablePostGlobal(enable: Int) = EpdController.enablePost(enable)
+
+    fun resetViewUpdateMode(view: View): Boolean = EpdController.resetViewUpdateMode(view)
+
+    fun setHandwritingRepaintMode(view: View): Boolean =
+        EpdController.setViewDefaultUpdateMode(view, UpdateMode.HAND_WRITING_REPAINT_MODE)
+
+    fun applyTransientFastMode(): Boolean = EpdController.applyTransientUpdate(UpdateMode.ANIMATION_QUALITY)
+
+    fun clearTransientFastMode(refresh: Boolean): Boolean = EpdController.clearTransientUpdate(refresh)
 
     private fun updateMode(mode: EinkMode): UpdateMode = when (mode) {
         EinkMode.NORMAL -> UpdateMode.GU

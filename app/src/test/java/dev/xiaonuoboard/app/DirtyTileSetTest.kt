@@ -131,4 +131,24 @@ class DirtyTileSetTest {
             assertTrue(set.isEmpty)
         }
     }
+
+    @Test
+    fun forEachIntersectingVisitsExactTileSubset() {
+        val g = TileGrid(1200, 1600, 200) // 6x8
+        val visited = mutableListOf<Int>()
+        g.forEachIntersecting(DirtyRect.EMPTY) { visited += it }
+        assertTrue(visited.isEmpty())
+
+        g.forEachIntersecting(DirtyRect(210, 420, 230, 450)) { visited += it }
+        assertEquals(listOf(2 * 6 + 1), visited)
+
+        visited.clear()
+        g.forEachIntersecting(DirtyRect(190, 190, 210, 210)) { visited += it }
+        assertEquals(listOf(0, 1, 6, 7), visited)
+
+        // Clamps out-of-bounds rects safely.
+        visited.clear()
+        g.forEachIntersecting(DirtyRect(-50, -50, 50, 50)) { visited += it }
+        assertEquals(listOf(0), visited)
+    }
 }

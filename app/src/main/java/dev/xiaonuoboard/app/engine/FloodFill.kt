@@ -149,7 +149,12 @@ class CrayonBrush(
 
     fun moveTo(x: Float, y: Float, beforeWrite: ((DirtyRect) -> Unit)? = null): DirtyRect {
         if (lastX.isNaN()) return begin(x, y, lockRegionId != 0, beforeWrite)
+        val dx = x - lastX
+        val dy = y - lastY
         val r1 = radius
+        if (dx * dx + dy * dy < MIN_MOVE_STEP_SQ && kotlin.math.abs(r1 - lastR) < MIN_RADIUS_DELTA) {
+            return DirtyRect.EMPTY
+        }
         val r = stampSegment(lastX, lastY, lastR, x, y, r1, beforeWrite)
         lastX = x
         lastY = y
@@ -283,5 +288,10 @@ class CrayonBrush(
 
         /** Transparent: the eraser writes this to reveal white paper. */
         const val ERASE_COLOR = 0x00000000
+
+        /** Skip redundant full-disc stamps on sub-pixel micro-moves when radius barely changed. */
+        const val MIN_MOVE_STEP_PX = 1.25f
+        const val MIN_MOVE_STEP_SQ = MIN_MOVE_STEP_PX * MIN_MOVE_STEP_PX
+        const val MIN_RADIUS_DELTA = 0.5f
     }
 }

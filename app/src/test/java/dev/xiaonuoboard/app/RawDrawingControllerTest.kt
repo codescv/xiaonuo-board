@@ -83,7 +83,11 @@ class RawDrawingControllerTest {
 
     private val limit = DirtyRect(0, 0, 800, 1000)
 
-    private inner class Rig(available: Boolean = true) {
+    private inner class Rig(
+        available: Boolean = true,
+        private val resumeDelay: () -> Long = { RawDrawingController.RENDER_RESUME_DELAY_MS },
+        requireSurface: Boolean = false,
+    ) {
         var isAvailable = available
         val backend = FakeBackend()
         val sink = FakeSink()
@@ -91,7 +95,7 @@ class RawDrawingControllerTest {
         var factoryCalls = 0
         var failure: String? = null
         var flushes = 0
-        /** What the canvas does on a pen-up flush: hide the layer, refresh, resume after the frame. */
+        /** What a structural flush does (legacy hide + resume); zero-pause SurfaceView bursts leave this false. */
         var flushLikeCanvas = false
         lateinit var listener: RawPenListener
         val c: RawDrawingController = RawDrawingController(
@@ -107,6 +111,8 @@ class RawDrawingControllerTest {
                     c.schedulePenLayerResume()
                 }
             },
+            resumeDelayMs = resumeDelay,
+            requireSurface = requireSurface,
         )
 
         /** Attached, laid out, focused, visible, crayon tool. */
@@ -283,17 +289,38 @@ class RawDrawingControllerTest {
     }
 
     @Test
-    fun nextStrokeBeforeResumeReEnablesPenLayerImmediately() {
+    fun nextStrokeDuringPauseSettleKeepsRenderOffCancelsPendingResumeAndResumesAfterStrokeEnd() {
         val r = Rig().armed()
         r.c.hidePenLayer()
         r.c.schedulePenLayerResume()
+        assertEquals(1, r.scheduler.pending.size)
+        r.backend.log.clear()
+
+        // Stroke starts while the pen layer is still paused for an undo/fill settle:
+        // do NOT re-enable render mid-stroke (would interrupt waveform & draw unclipped HW trace).
         r.c.onRawBegin(10f, 10f, 1f, 0L, false)
+        assertFalse("render stays off for this software stroke", r.c.isRenderEnabled)
+        assertFalse(r.c.lastBeginRenderWasEnabled)
+        assertTrue("pending resume cancelled so it cannot fire mid-stroke", r.scheduler.pending.isEmpty())
+        assertTrue("no firmware render toggle mid-stroke", r.backend.log.isEmpty())
+
+        // On stroke end, resume is scheduled cleanly and brings the pen layer back after settle.
+        r.c.onRawEnd(10f, 10f, 0f, 1L, false)
+        assertFalse(r.c.isRenderEnabled)
+        assertEquals(1, r.scheduler.pending.size)
+        r.scheduler.runAll()
         assertTrue(r.c.isRenderEnabled)
-        assertTrue("scheduled resume cancelled", r.scheduler.pending.isEmpty())
-        // A MotionEvent-owned pen stroke does the same.
-        r.c.onRawEnd(10f, 10f, 0f, 0L, false)
+        assertEquals(listOf("render=true"), r.backend.log)
+
+        // MotionEvent-owned pen stroke during pause behaves identically.
         r.c.hidePenLayer()
+        r.c.schedulePenLayerResume()
         r.c.onPenStrokeStart()
+        assertFalse(r.c.isRenderEnabled)
+        assertTrue(r.scheduler.pending.isEmpty())
+        r.c.onPenStrokeEnd(cancelled = false)
+        assertEquals(1, r.scheduler.pending.size)
+        r.scheduler.runAll()
         assertTrue(r.c.isRenderEnabled)
     }
 
@@ -411,31 +438,41 @@ class RawDrawingControllerTest {
     @Test
     fun penBeatsAFingerHoldAndARestingPalmNeverHidesALiveTrace() {
         val r = Rig().armed()
-        r.c.setFingerGesture(true) // palm lands first
+        r.c.setFingerGesture(true) // palm lands first (hides pen layer)
         r.c.onRawBegin(10f, 10f, 1f, 0L, false)
-        assertTrue(r.c.isRenderEnabled)
-        assertFalse(r.c.isFingerGestureActive)
+        assertFalse("finger hold cleared by pen priority", r.c.isFingerGestureActive)
+        assertFalse("render stays off for this mid-pause stroke, resumes after pen-up", r.c.isRenderEnabled)
+        r.c.onRawEnd(10f, 10f, 0f, 1L, false)
+        r.scheduler.runAll()
+        assertTrue("pen layer back live after settle", r.c.isRenderEnabled)
+
+        // Next stroke starts with live trace: a resting palm during it must never hide the trace.
+        r.c.onRawBegin(10f, 10f, 1f, 2L, false)
         r.backend.log.clear()
         r.c.setFingerGesture(true) // palm lands during the raw stroke
         assertTrue(r.backend.log.isEmpty())
         assertTrue(r.c.isRenderEnabled)
-        // MotionEvent-owned pen stroke also clears the hold.
-        r.c.onRawEnd(10f, 10f, 0f, 0L, false)
+        // MotionEvent-owned pen stroke also clears the finger hold and schedules resume on end.
+        r.c.onRawEnd(10f, 10f, 0f, 3L, false)
         r.c.setFingerGesture(true)
         r.c.onPenStrokeStart()
-        assertTrue(r.c.isRenderEnabled)
         assertFalse(r.c.isFingerGestureActive)
+        r.c.onPenStrokeEnd(cancelled = false)
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
     }
 
     @Test
-    fun rawBeginDoesNotStartAStrokeWhenResumingThePenLayerFails() {
+    fun resumeFailureShutsDownRawDrawingCleanly() {
         val r = Rig().armed()
         r.c.hidePenLayer()
         r.backend.renderOk = false
-        r.c.onRawBegin(10f, 10f, 1f, 0L, false)
+        r.c.schedulePenLayerResume()
+        r.scheduler.runAll()
         assertTrue(r.c.isFailed)
-        assertFalse(r.c.isRawStrokeActive)
-        assertTrue("no orphan RAW pointer in the router", r.sink.events.isEmpty())
+        assertFalse(r.c.isOpen)
+        assertFalse(r.c.isEnabled)
+        assertNotNull(r.failure)
     }
 
     @Test
@@ -614,6 +651,8 @@ class RawDrawingControllerTest {
         assertFalse(r.c.isPenUpFlushPending)
         assertTrue(r.scheduler.pending.isEmpty())
         assertEquals("the caller refreshes, no second flush", 0, r.flushes)
+        r.c.schedulePenLayerResume()
+        r.scheduler.runAll() // pen layer is live again for the next burst
         r.canvasStroke()
         r.c.cancelPenUpFlush() // the canvas flush took the burst
         assertFalse(r.c.isPenUpFlushPending)
@@ -676,8 +715,97 @@ class RawDrawingControllerTest {
 
     @Test
     fun debounceCoversBurstPenLiftsWithoutFeelingSluggish() {
-        assertTrue(RawDrawingController.PEN_UP_FLUSH_DELAY_MS in 500L..1000L)
-        assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS > RawDrawingController.RENDER_RESUME_DELAY_MS)
+        assertEquals(300L, RawDrawingController.PEN_UP_FLUSH_DELAY_MS)
+        assertEquals(500L, RawDrawingController.COLOR_RESUME_DELAY_MS)
+        assertEquals(150L, RawDrawingController.MONO_RESUME_DELAY_MS)
+        assertTrue("never 16ms: must let EPD waveform finish", RawDrawingController.RENDER_RESUME_DELAY_MS >= 150L)
+        assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS >= RawDrawingController.RENDER_RESUME_DELAY_MS)
+    }
+
+    @Test
+    fun zeroPausePenBurstFlushKeepsPenLayerContinuouslyLive() {
+        val r = Rig().armed()
+        r.backend.log.clear()
+        // SurfaceView HAND_WRITING_REPAINT_MODE burst flush never calls hidePenLayer().
+        r.canvasStroke(10f, 10f)
+        r.canvasStroke(30f, 10f)
+        assertEquals(0, r.flushes)
+        r.scheduler.runAll()
+        assertEquals(1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+        assertTrue("pen layer stayed live across the burst repaint", r.c.isRenderEnabled)
+        assertTrue("zero hide/resume firmware calls during normal pen coloring", r.backend.log.isEmpty())
+    }
+
+    @Test
+    fun configurableResumeDelayIsUsedForStructuralRefreshesAndFingerGestures() {
+        val colorRig = Rig(resumeDelay = { RawDrawingController.COLOR_RESUME_DELAY_MS }).armed()
+        colorRig.c.hidePenLayer()
+        colorRig.c.schedulePenLayerResume()
+        assertEquals(listOf(500L), colorRig.scheduler.delays)
+        colorRig.scheduler.runAll()
+        assertTrue(colorRig.c.isRenderEnabled)
+
+        colorRig.scheduler.delays.clear()
+        colorRig.c.setFingerGesture(true)
+        colorRig.c.setFingerGesture(false)
+        assertEquals(listOf(500L), colorRig.scheduler.delays)
+    }
+
+    @Test
+    fun surfaceValidityGatesTouchHelperOpenAndTeardown() {
+        val r = Rig(requireSurface = true)
+        r.c.setStroke(12f, 0xFFFF0000.toInt())
+        r.c.setWindowFocused(true)
+        r.c.setVisible(true)
+        r.c.setToolAllowsRaw(true)
+        r.c.setAttached(true)
+        r.c.setBounds(limit, emptyList(), 0, 100)
+        assertFalse("waits for surfaceCreated before opening TouchHelper", r.c.isOpen)
+        assertEquals(0, r.backend.opens)
+
+        r.c.setSurfaceValid(true)
+        assertTrue(r.c.isOpen)
+        assertTrue(r.c.isEnabled)
+
+        r.c.onRawBegin(10f, 10f, 1f, 0L, false)
+        r.c.setSurfaceValid(false) // surfaceDestroyed tears down TouchHelper cleanly
+        assertFalse(r.c.isOpen)
+        assertFalse(r.c.isEnabled)
+        assertEquals("abort", r.sink.events.last())
+    }
+
+    @Test
+    fun suppressedStylusMotionEventsStillTriggerThreeMissSelfHealing() {
+        val r = Rig().armed()
+        // 2 missed strokes + 1 cancelled stroke → still open.
+        repeat(2) {
+            r.c.onMotionPenObserved(down = true)
+            r.c.onMotionPenObserved(down = false, cancelled = false)
+        }
+        assertNull(r.failure)
+        assertTrue(r.c.isOpen)
+        r.c.onMotionPenObserved(down = true)
+        r.c.onMotionPenObserved(down = false, cancelled = true)
+        assertNull(r.failure)
+        // 3rd missed stroke → fallback disables broken TouchHelper.
+        r.c.onMotionPenObserved(down = true)
+        r.c.onMotionPenObserved(down = false, cancelled = false)
+        assertNotNull(r.failure)
+        assertTrue(r.c.isFailed)
+        assertFalse(r.c.isOpen)
+
+        // Once raw events have been delivered, suppressed stylus MotionEvents never trigger misses.
+        val healthy = Rig().armed()
+        healthy.c.onMotionPenObserved(down = true)
+        healthy.stroke()
+        healthy.c.onMotionPenObserved(down = false, cancelled = false)
+        repeat(5) {
+            healthy.c.onMotionPenObserved(down = true)
+            healthy.c.onMotionPenObserved(down = false, cancelled = false)
+        }
+        assertNull(healthy.failure)
+        assertTrue(healthy.c.isEnabled)
     }
     // ---------------- pressure propagation / pressure pen style ----------------
 
@@ -748,6 +876,8 @@ class RawDrawingControllerTest {
         r.c.hidePenLayer()
         r.stroke()
         assertFalse("layer was hidden at pen-down", r.c.lastBeginRenderWasEnabled)
-        assertTrue("…and is resumed by the pen-down", r.c.isRenderEnabled)
+        assertFalse("stays hidden during the software stroke, resumed after settle", r.c.isRenderEnabled)
+        r.scheduler.runAll()
+        assertTrue("resumed after stroke end settle", r.c.isRenderEnabled)
     }
 }

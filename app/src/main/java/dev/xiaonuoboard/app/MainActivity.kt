@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import dev.xiaonuoboard.app.eink.EinkMode
 import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.i18n.AppI18n
 import dev.xiaonuoboard.app.i18n.AppStrings
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
         // BOOX only (no-op elsewhere): hidden-API exemption + Onyx SDK init + EPD / stylus probe,
         // before any canvas creates a TouchHelper.
         OnyxEinkBridge.init(this)
+        OnyxEinkBridge.enablePost(window.decorView, 1)
         container.updater.checkOnStartupIfDue()
         setContent {
             XiaonuoTheme { XiaonuoApp(container) }
@@ -103,9 +105,16 @@ fun XiaonuoApp(container: AppContainer) {
     val screenKey: Any = if (screen is Screen.Canvas) "canvas:${screen.pageId}" else screen
     LaunchedEffect(screenKey, settings.einkMode, settings.booxSdkMode) {
         OnyxEinkBridge.setSdkMode(settings.booxSdkMode)
-        // Browsing screens use the parent-selected clear mode; each screen switch gets one clean refresh.
-        OnyxEinkBridge.setViewDefaultMode(view, settings.einkMode)
-        OnyxEinkBridge.refresh(view, settings.einkMode)
+        OnyxEinkBridge.enablePost(view, 1)
+        if (screen is Screen.Canvas) {
+            // Keep the shared Compose host out of slow REGAL while the SurfaceView canvas manages
+            // its own EPD waveforms; do not issue a root REGAL refresh over the SurfaceView.
+            OnyxEinkBridge.setViewDefaultMode(view, EinkMode.NORMAL)
+        } else {
+            // Browsing screens use the parent-selected clear mode; each screen switch gets one clean refresh.
+            OnyxEinkBridge.setViewDefaultMode(view, settings.einkMode)
+            OnyxEinkBridge.refresh(view, settings.einkMode)
+        }
     }
 
     BackHandler(enabled = stack.size > 1) { pop() }

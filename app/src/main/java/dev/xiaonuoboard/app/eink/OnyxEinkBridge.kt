@@ -63,6 +63,9 @@ object OnyxEinkBridge {
     private const val TAG = "OnyxEinkBridge"
     private const val BOOX_FRAMEWORK_CLASS = "android.onyx.hardware.DeviceController"
     const val SDK_VERSIONS = "onyxsdk-device 1.3.7 · onyxsdk-pen 1.5.9"
+    /** Pen-layer resume settle times matching Onyx's `NoteConstant` (color Kaleido vs monochrome). */
+    const val COLOR_PEN_RESUME_DELAY_MS = 500L
+    const val MONO_PEN_RESUME_DELAY_MS = 150L
 
     /**
      * Pure BOOX detection rule (unit-tested). Onyx devices report `ONYX` as manufacturer and
@@ -99,6 +102,19 @@ object OnyxEinkBridge {
     @Volatile private var failure: String? = null
     @Volatile private var rawDrawingFailure: String? = null
     @Volatile private var maxPressure: Float = 0f
+    @Volatile private var inFastStroke = false
+
+    /** True when running on a color E-Ink BOOX device (Kaleido). Probed during [init]. */
+    @Volatile
+    var isColorEink: Boolean = false
+        private set
+
+    /** Pure helper for the pen-layer resume settle delay (unit-tested). */
+    internal fun penResumeDelayMs(isColor: Boolean): Long =
+        if (isColor) COLOR_PEN_RESUME_DELAY_MS else MONO_PEN_RESUME_DELAY_MS
+
+    /** Delay before resuming the hardware pen layer after a structural refresh (`hidePenLayer`). */
+    val penResumeDelayMs: Long get() = penResumeDelayMs(isColorEink)
 
     /** User-selected BOOX SDK mode (persisted in Settings). Defaults to [BooxSdkMode.OFF]. */
     @Volatile
@@ -107,6 +123,7 @@ object OnyxEinkBridge {
 
     fun setSdkMode(mode: BooxSdkMode) {
         if (sdkMode == mode) return
+        if (mode == BooxSdkMode.OFF && inFastStroke) exitFastStroke(refresh = false)
         sdkMode = mode
         DiagLog.log(DiagLog.ONYX, "sdkMode=${mode.name}")
     }
@@ -132,6 +149,7 @@ object OnyxEinkBridge {
             return
         }
         maxPressure = try { OnyxSdk.maxTouchPressure() } catch (_: Throwable) { 0f }
+        isColorEink = try { OnyxSdk.isColorDevice() } catch (_: Throwable) { false }
         touchHelperReady = try {
             Build.SUPPORTED_ABIS.orEmpty().contains("arm64-v8a") && OnyxSdk.hasStylus(app)
         } catch (t: Throwable) {
@@ -139,7 +157,11 @@ object OnyxEinkBridge {
             DiagLog.log(DiagLog.ONYX, "stylus probe failed: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
-        DiagLog.log(DiagLog.ONYX, "init ok: device=$deviceInfo touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure")
+        DiagLog.log(
+            DiagLog.ONYX,
+            "init ok: device=$deviceInfo color=$isColorEink penResumeDelayMs=$penResumeDelayMs " +
+                "touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure",
+        )
     }
 
     /**
@@ -161,6 +183,7 @@ object OnyxEinkBridge {
         append(" support=").append(support.name).append('\n')
         append("  sdk=").append(SDK_VERSIONS)
         append(" device=").append(deviceInfo ?: "-")
+        append(" color=").append(isColorEink)
         append(" maxTouchPressure=").append(maxPressure).append('\n')
         append("  initFailure=").append(failure ?: "-")
         append(" rawDrawingFailure=").append(rawDrawingFailure ?: "-")
@@ -233,6 +256,94 @@ object OnyxEinkBridge {
         var ok = false
         onyx("setViewDefaultUpdateMode") { ok = OnyxSdk.setViewDefaultMode(view, mode) }
         return ok
+    }
+
+    /** Enables or disables SurfaceFlinger posting for [view] (call with `1` on decorView / SurfaceView init). */
+    fun enablePost(view: View, enable: Int): Boolean =
+        onyx("enablePost") { OnyxSdk.enablePost(view, enable) }
+
+    /** Resets [view]'s custom update mode back to system default. */
+    fun resetViewUpdateMode(view: View): Boolean =
+        onyx("resetViewUpdateMode") { OnyxSdk.resetViewUpdateMode(view) }
+
+    /**
+     * Zero-pause pen-up repaint on a `SurfaceView` while `TouchHelper` stays in `PEN_DRAWING`:
+     * sets `UpdateMode.HAND_WRITING_REPAINT_MODE`, runs [block] (`lockCanvas` + draw + `unlockCanvasAndPost`),
+     * and resets the view update mode in `finally`. Off BOOX or when SDK is off, simply runs [block].
+     */
+    fun withHandwritingRepaint(view: View, block: () -> Unit) {
+        if (!isAvailable) {
+            block()
+            return
+        }
+        onyx("setHandwritingRepaintMode") { OnyxSdk.setHandwritingRepaintMode(view) }
+        try {
+            block()
+        } finally {
+            onyx("resetViewUpdateMode") { OnyxSdk.resetViewUpdateMode(view) }
+        }
+    }
+
+    /**
+     * Pushes a `SurfaceView` frame cleanly, optionally tagging [mode] and (when [forceUnfreeze] is
+     * true, e.g. while a raw-drawing session is open) unblocking global screen posting via
+     * `enablePost(0) → enablePost(1) + enablePost(view, 1)`. Resets the view update mode in `finally`.
+     * Off BOOX / SDK off, simply runs [block].
+     */
+    fun withForcedPost(
+        view: View,
+        mode: EinkMode? = null,
+        forceUnfreeze: Boolean = false,
+        block: () -> Unit,
+    ) {
+        if (!isAvailable) {
+            block()
+            return
+        }
+        if (mode != null) {
+            onyx("setViewDefaultUpdateMode") { OnyxSdk.setViewDefaultMode(view, mode) }
+        }
+        if (forceUnfreeze) {
+            onyx("enablePost") {
+                OnyxSdk.enablePostGlobal(0)
+                OnyxSdk.enablePostGlobal(1)
+                OnyxSdk.enablePost(view, 1)
+            }
+        }
+        try {
+            block()
+        } finally {
+            if (mode != null || forceUnfreeze) {
+                onyx("resetViewUpdateMode") { OnyxSdk.resetViewUpdateMode(view) }
+            }
+        }
+    }
+
+    /** Global full-screen EPD repaint (`EpdController.repaintEveryThing`). Returns true on success. */
+    fun repaintEverything(mode: EinkMode = EinkMode.FULL): Boolean =
+        onyx("repaintEveryThing") { OnyxSdk.repaintEverything(mode) }
+
+    /** True while a transient fast-stroke waveform (`ANIMATION_QUALITY`) is currently active. */
+    val isInFastStroke: Boolean get() = inFastStroke
+
+    /**
+     * Enters BOOX's transient fast update mode (`ANIMATION_QUALITY`) for the duration of a software
+     * stroke or pan/zoom gesture (idempotent; always balanced with [exitFastStroke]).
+     */
+    @Synchronized
+    fun enterFastStroke(): Boolean {
+        if (!isAvailable || inFastStroke) return false
+        val ok = onyx("applyTransientFastMode") { OnyxSdk.applyTransientFastMode() }
+        if (ok) inFastStroke = true
+        return ok
+    }
+
+    /** Exits transient fast update mode if currently active (idempotent). */
+    @Synchronized
+    fun exitFastStroke(refresh: Boolean = false): Boolean {
+        if (!inFastStroke) return false
+        inFastStroke = false
+        return onyx("clearTransientFastMode") { OnyxSdk.clearTransientFastMode(refresh) }
     }
 
     /**

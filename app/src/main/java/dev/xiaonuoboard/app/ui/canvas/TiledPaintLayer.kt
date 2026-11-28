@@ -60,6 +60,20 @@ class TiledPaintLayer(
         for (i in tiles.indices) canvas.drawBitmap(tiles[i], tileX[i], tileY[i], paint)
     }
 
+    /**
+     * Draws only tiles intersecting [clipCanvasRect] (canvas coordinates), avoiding redundant
+     * blits for off-rect tiles during partial SurfaceView updates.
+     */
+    fun drawRegion(canvas: Canvas, paint: Paint?, clipCanvasRect: DirtyRect) {
+        if (isReleased) return
+        val c = clipCanvasRect.clamp(width, height)
+        if (c.isEmpty) return
+        flush()
+        grid.forEachIntersecting(c) { i ->
+            canvas.drawBitmap(tiles[i], tileX[i], tileY[i], paint)
+        }
+    }
+
     fun release() {
         if (isReleased) return
         isReleased = true

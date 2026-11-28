@@ -17,6 +17,23 @@ class TileGrid(val width: Int, val height: Int, val tileSize: Int) {
     fun top(i: Int): Int = (i / cols) * tileSize
     fun tileWidth(i: Int): Int = minOf(tileSize, width - left(i))
     fun tileHeight(i: Int): Int = minOf(tileSize, height - top(i))
+
+    /** Invokes [action] for every tile index whose bounds intersect [rect] (clamped to canvas). */
+    inline fun forEachIntersecting(rect: DirtyRect, action: (Int) -> Unit) {
+        val l = rect.left.coerceIn(0, width)
+        val t = rect.top.coerceIn(0, height)
+        val r = rect.right.coerceIn(0, width)
+        val b = rect.bottom.coerceIn(0, height)
+        if (r <= l || b <= t) return
+        val tx0 = l / tileSize
+        val tx1 = (r - 1) / tileSize
+        val ty0 = t / tileSize
+        val ty1 = (b - 1) / tileSize
+        for (ty in ty0..ty1) {
+            val row = ty * cols
+            for (tx in tx0..tx1) action(row + tx)
+        }
+    }
 }
 
 /**
