@@ -54,6 +54,7 @@ class OnyxEinkBridgeTest {
         val v = CountingView()
         assertFalse(OnyxEinkBridge.setViewDefaultMode(v, EinkMode.REGAL))
         assertFalse(OnyxEinkBridge.enablePost(v, 1))
+        assertFalse(OnyxEinkBridge.enablePostGlobal(1))
         assertFalse(OnyxEinkBridge.resetViewUpdateMode(v))
         assertFalse(OnyxEinkBridge.isColorEink)
         assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs)
@@ -78,10 +79,11 @@ class OnyxEinkBridgeTest {
         assertFalse(OnyxEinkBridge.isInFastStroke)
 
         OnyxEinkBridge.refresh(v, EinkMode.FAST)
+        OnyxEinkBridge.refreshHostUi(v, EinkMode.NORMAL)
         OnyxEinkBridge.refreshRect(v, 1, 2, 30, 40, EinkMode.NORMAL)
         OnyxEinkBridge.refreshRect(v, Rect(), EinkMode.NORMAL)
         OnyxEinkBridge.clearGhosting(v)
-        assertEquals("each refresh falls back to exactly one invalidate()", 4, v.invalidates)
+        assertEquals("each refresh falls back to exactly one invalidate()", 5, v.invalidates)
         OnyxEinkBridge.reportRawDrawingFailure("test")
         assertFalse("Onyx classes were touched off BOOX", OnyxEinkBridge.sdkTouched)
     }

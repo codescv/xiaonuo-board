@@ -127,14 +127,6 @@ fun CanvasScreen(
 
     val controller = s.controller
     val rootView = LocalView.current
-    // Once loadSession finishes (replacing the "加载中..." placeholder with the real toolbars +
-    // SurfaceView), issue one NORMAL (GU) refresh on the Compose host so the top toolbar, brush
-    // row, PiP and palette paint cleanly on BOOX EPD before TouchHelper arms raw drawing.
-    LaunchedEffect(s) {
-        OnyxEinkBridge.enablePost(rootView, 1)
-        OnyxEinkBridge.setViewDefaultMode(rootView, EinkMode.NORMAL)
-        OnyxEinkBridge.refresh(rootView, EinkMode.NORMAL)
-    }
     // Every background job that reads session bitmaps; they are recycled only after all have finished.
     val ioJobs = remember(pageId) { JobTracker() }
     var currentArtworkId by remember(pageId) { mutableStateOf(initialArtworkId) }
@@ -163,6 +155,41 @@ fun CanvasScreen(
     var refButtonBounds by remember { mutableStateOf<UiRect?>(null) }
     var messageBounds by remember { mutableStateOf<UiRect?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val zoomLabel = if (zoom > 1.01f) "${String.format(Locale.US, "%.1f", zoom)}×" else null
+    // Every piece of Compose chrome UI outside the SurfaceView canvas. While BOOX TouchHelper is
+    // in PEN_DRAWING (2), SurfaceFlinger freezes standard Activity window updates; whenever any
+    // toolbar / brush / palette / PiP / toast state changes, notify the canvas so it briefly
+    // pauses PEN_DRAWING, refreshes rootView in NORMAL (GU), and resumes after settle.
+    val chromeKey = listOf(
+        tool,
+        brush,
+        color,
+        stayInside,
+        stylusOnly,
+        ghost,
+        pipExpanded,
+        pipCollapsed,
+        showAllColors,
+        zoomLabel,
+        confirmReset,
+        message,
+    )
+    var chromeMounted by remember(s) { mutableStateOf(false) }
+    LaunchedEffect(s, chromeKey) {
+        if (!chromeMounted) {
+            chromeMounted = true
+            OnyxEinkBridge.setViewDefaultMode(rootView, EinkMode.NORMAL)
+            OnyxEinkBridge.refreshHostUi(rootView, EinkMode.NORMAL)
+            return@LaunchedEffect
+        }
+        val view = canvasView
+        if (view != null && !view.isReleased) {
+            view.notifyChromeUiChanged(rootView)
+        } else {
+            OnyxEinkBridge.refreshHostUi(rootView, EinkMode.NORMAL)
+        }
+    }
 
     // Push UI state into the engine.
     controller.tool = tool
@@ -297,7 +324,7 @@ fun CanvasScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val m = Modifier.weight(1f).fillMaxHeight()
-            EinkIconButton(m, onClick = onBack) { tint -> KidIcons.BackArrow(tint) }
+            EinkIconButton(m, onClick = { canvasView?.prepareForExit(rootView); onBack() }) { tint -> KidIcons.BackArrow(tint) }
             EinkIconButton(m, selected = tool == Tool.CRAYON, onClick = { tool = Tool.CRAYON }) { tint -> KidIcons.Crayon(tint) }
             EinkIconButton(m, selected = tool == Tool.FILL, onClick = { tool = Tool.FILL }) { tint -> KidIcons.PaintBucket(tint) }
             EinkIconButton(m, selected = tool == Tool.ERASER, onClick = { tool = Tool.ERASER }) { tint -> KidIcons.Eraser(tint) }
@@ -316,7 +343,7 @@ fun CanvasScreen(
             EinkIconButton(
                 m,
                 selected = ghostHint,
-                onClick = { canvasView?.clearGhosting(); ghostHint = false },
+                onClick = { canvasView?.clearGhosting(rootView); ghostHint = false },
             ) { tint -> KidIcons.SparkleRefresh(tint) }
             EinkIconButton(
                 m,
@@ -368,8 +395,8 @@ fun CanvasScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (zoom > 1.01f) {
-                EinkButton("${String.format(Locale.US, "%.1f", zoom)}×", Modifier.fillMaxHeight(), fontSize = 15, minHeight = 48.dp) {
+            if (zoomLabel != null) {
+                EinkButton(zoomLabel, Modifier.fillMaxHeight(), fontSize = 15, minHeight = 48.dp) {
                     canvasView?.resetZoom()
                 }
             }

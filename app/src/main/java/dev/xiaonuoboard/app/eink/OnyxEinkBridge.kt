@@ -262,6 +262,20 @@ object OnyxEinkBridge {
     fun enablePost(view: View, enable: Int): Boolean =
         onyx("enablePost") { OnyxSdk.enablePost(view, enable) }
 
+    /** Enables or disables global EPD screen posting (`EpdController.enablePost(int)`). */
+    fun enablePostGlobal(enable: Int): Boolean =
+        onyx("enablePostGlobal") { OnyxSdk.enablePostGlobal(enable) }
+
+    /**
+     * Unblocks posting for the Compose host window [view] and triggers a clean [mode] refresh so
+     * toolbar / palette / toast updates appear immediately on BOOX EPD after leaving `PEN_DRAWING`.
+     */
+    fun refreshHostUi(view: View, mode: EinkMode = EinkMode.NORMAL) {
+        enablePostGlobal(1)
+        enablePost(view, 1)
+        refresh(view, mode)
+    }
+
     /** Resets [view]'s custom update mode back to system default. */
     fun resetViewUpdateMode(view: View): Boolean =
         onyx("resetViewUpdateMode") { OnyxSdk.resetViewUpdateMode(view) }

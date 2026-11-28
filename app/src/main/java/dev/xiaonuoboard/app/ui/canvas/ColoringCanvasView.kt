@@ -132,6 +132,7 @@ class ColoringCanvasView(
     private var pendingTransformRedraw = false
     private var lastFastBlitUptimeMs = 0L
     private var pendingArmRawAfterInteraction = false
+    private var pendingChromeRefreshHost: View? = null
     private val flushRefresh = Runnable { flushPendingRefresh() }
     private val armRawSurface = Runnable { armRawSurfaceNow() }
 
@@ -277,6 +278,7 @@ class ColoringCanvasView(
                     onStrokeFinished?.invoke()
                 }
                 onStrokeEnded?.invoke()
+                flushPendingChromeRefresh()
                 maybeReschedulePendingRawArm()
             }
 
@@ -388,10 +390,61 @@ class ColoringCanvasView(
         refreshWholeView(EinkMode.NORMAL)
     }
 
-    fun clearGhosting() {
+    /**
+     * Briefly unfreezes BOOX `PEN_DRAWING` (`hidePenLayer` → `PEN_PAUSE`) so Compose chrome changes
+     * on [hostView] (top toolbar, brush row, PiP, bottom palette, toasts) post cleanly to the EPD,
+     * then resumes hardware raw drawing after [OnyxEinkBridge.penResumeDelayMs].
+     *
+     * Deferred while a stroke or pinch/pan gesture is in flight so live strokes and zoom never stutter.
+     * Never called during continuous canvas coloring — zero impact on handwriting speed.
+     */
+    fun notifyChromeUiChanged(hostView: View) {
+        if (!initDone || !OnyxEinkBridge.isAvailable) return
+        if (hwPreview || stroking || fingerVisual) {
+            pendingChromeRefreshHost = hostView
+            return
+        }
+        pendingChromeRefreshHost = null
+        val hadBurst = !penBurst.isEmpty
+        val wasLive = raw.isOpen && raw.isEnabled && raw.isRenderEnabled
+        if (wasLive) {
+            raw.hidePenLayer()
+        }
+        if (hadBurst && surfaceValid && !paintLayer.isReleased) {
+            flushPenBurst()
+        }
+        OnyxEinkBridge.refreshHostUi(hostView, EinkMode.NORMAL)
+        DiagLog.log(DiagLog.DRAW) { "chromeRefresh wasLive=$wasLive hadBurst=$hadBurst rawOpen=${raw.isOpen}" }
+        if (raw.isOpen && raw.isEnabled && !raw.isRenderEnabled) {
+            raw.schedulePenLayerResume()
+        } else if (!raw.isOpen && surfaceValid && OnyxEinkBridge.isTouchHelperAvailable) {
+            scheduleInitialRawArm()
+        }
+    }
+
+    /** Leaves BOOX scribble freeze immediately before popping the canvas screen (Back button). */
+    fun prepareForExit(hostView: View) {
+        if (!initDone || !OnyxEinkBridge.isAvailable) return
+        removeCallbacks(armRawSurface)
+        pendingArmRawAfterInteraction = false
+        pendingChromeRefreshHost = null
+        OnyxEinkBridge.exitFastStroke(refresh = false)
+        raw.hidePenLayer()
+        OnyxEinkBridge.enablePostGlobal(1)
+        OnyxEinkBridge.enablePost(hostView, 1)
+    }
+
+    private fun flushPendingChromeRefresh() {
+        val host = pendingChromeRefreshHost ?: return
+        if (hwPreview || stroking || fingerVisual) return
+        notifyChromeUiChanged(host)
+    }
+
+    fun clearGhosting(hostView: View? = null) {
         strokesSinceFull = 0
         onGhostHint?.invoke(false)
         if (!initDone) return
+        pendingChromeRefreshHost = null
         penBurst.clear()
         refreshes.clear()
         removeCallbacks(flushRefresh)
@@ -401,6 +454,11 @@ class ColoringCanvasView(
         raw.hidePenLayer()
         DiagLog.log(DiagLog.DRAW, "clearGhosting (GC)")
         if (OnyxEinkBridge.isAvailable) {
+            if (hostView != null) {
+                OnyxEinkBridge.enablePostGlobal(1)
+                OnyxEinkBridge.enablePost(hostView, 1)
+                hostView.invalidate()
+            }
             // Push latest pixels without tagging a duplicate GC flash, then issue one global GC flash.
             OnyxEinkBridge.withForcedPost(this, mode = null, forceUnfreeze = raw.isOpen) { renderToSurface(null) }
             if (!OnyxEinkBridge.repaintEverything(EinkMode.FULL)) {
@@ -440,6 +498,7 @@ class ColoringCanvasView(
         holder.removeCallback(this)
         removeCallbacks(armRawSurface)
         pendingArmRawAfterInteraction = false
+        pendingChromeRefreshHost = null
         surfaceValid = false
         surfaceRenderedOnce = false
         lastRenderedW = 0
@@ -540,6 +599,7 @@ class ColoringCanvasView(
         DiagLog.log(DiagLog.CANVAS, "surfaceDestroyed")
         removeCallbacks(armRawSurface)
         pendingArmRawAfterInteraction = false
+        pendingChromeRefreshHost = null
         surfaceValid = false
         surfaceRenderedOnce = false
         lastRenderedW = 0
@@ -597,6 +657,7 @@ class ColoringCanvasView(
         DiagLog.log(DiagLog.CANVAS, "detached")
         removeCallbacks(armRawSurface)
         pendingArmRawAfterInteraction = false
+        pendingChromeRefreshHost = null
         viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
         raw.setAttached(false)
         OnyxEinkBridge.exitFastStroke(refresh = false)
@@ -806,6 +867,7 @@ class ColoringCanvasView(
         if (wasTransformed && surfaceValid && !paintLayer.isReleased) {
             OnyxEinkBridge.withForcedPost(this, EinkMode.NORMAL, forceUnfreeze = raw.isOpen) { renderToSurface(null) }
         }
+        flushPendingChromeRefresh()
         raw.setFingerGesture(false)
         maybeReschedulePendingRawArm()
     }

@@ -803,6 +803,27 @@ class RawDrawingControllerTest {
     }
 
     @Test
+    fun rapidChromeClicksKeepPenLayerPausedAndCoalesceIntoSingleResume() {
+        val r = Rig(resumeDelay = { RawDrawingController.COLOR_RESUME_DELAY_MS }).armed()
+        r.backend.log.clear()
+        // Simulate 3 rapid toolbar/color taps while PEN_DRAWING is active:
+        // 1st tap hides the pen layer and schedules a 500ms resume; 2nd & 3rd taps keep it hidden
+        // and slide the single resume timer without bouncing render back on in between.
+        repeat(3) {
+            r.c.hidePenLayer()
+            r.c.schedulePenLayerResume()
+        }
+        assertFalse(r.c.isRenderEnabled)
+        assertEquals(listOf("render=false"), r.backend.log)
+        assertEquals(1, r.scheduler.pending.size)
+        assertEquals(listOf(500L, 500L, 500L), r.scheduler.delays)
+
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+        assertEquals(listOf("render=false", "render=true"), r.backend.log)
+    }
+
+    @Test
     fun suppressedStylusMotionEventsStillTriggerThreeMissSelfHealing() {
         val r = Rig().armed()
         // 2 missed strokes + 1 cancelled stroke → still open.

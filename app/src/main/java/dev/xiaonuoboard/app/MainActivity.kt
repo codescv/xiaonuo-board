@@ -105,6 +105,7 @@ fun XiaonuoApp(container: AppContainer) {
     val screenKey: Any = if (screen is Screen.Canvas) "canvas:${screen.pageId}" else screen
     LaunchedEffect(screenKey, settings.einkMode, settings.booxSdkMode) {
         OnyxEinkBridge.setSdkMode(settings.booxSdkMode)
+        OnyxEinkBridge.enablePostGlobal(1)
         OnyxEinkBridge.enablePost(view, 1)
         if (screen is Screen.Canvas) {
             // Keep the shared Compose host out of slow REGAL while the SurfaceView canvas manages
