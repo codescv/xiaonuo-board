@@ -73,7 +73,8 @@ class RawDrawingGeometryTest {
         assertEquals(RawDrawingGeometry.HW_WHITE, RawDrawingGeometry.hardwarePreviewColor(0xFF000000.toInt(), eraser = true))
         assertEquals(RawDrawingGeometry.HW_WHITE, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = true))
 
-        // Every verified BOOX Notes hardware color is an exact fixed point.
+        // Every verified BOOX Notes hardware color (complete 16-color native palette) is an exact fixed point.
+        assertEquals(16, RawDrawingGeometry.BOOX_HARDWARE_PALETTE.size)
         for (hw in RawDrawingGeometry.BOOX_HARDWARE_PALETTE) {
             assertEquals(
                 "BOOX Notes color #${Integer.toHexString(hw)} must map to itself",
@@ -82,39 +83,45 @@ class RawDrawingGeometryTest {
             )
         }
 
-        // Problematic Bluey / Elsa / Kaleido colors map accurately without false blue tints:
-        // - Near-white pale tints (#D4E9F9, #D3E9F9, #F4F2DD) map to neutral dark gray (#404040), never blue.
+        // Problematic Bluey / Elsa / Kaleido colors map accurately onto BOOX Notes' 16 native colors:
+        // - Near-white pale tints (#D4E9F9, #D3E9F9, #F4F2DD, #FCF7D4) map to light gray (#C0C0C0), never blue.
+        // - Mid/warm grays (#8D99AE) map to mid gray (#808080).
         // - Dark charcoal/slate (#3B3E63, #3C3C6C, #24243C) map to black (#000000), never blue.
         // - True saturated blues (#000084, #283878, #2400FF) stay navy blue (#000084).
-        // - Light coral-red (#FD7874, #FC846C) maps to verified orange-red (#FF4400), distinct from bright red (#F44442 -> #FF0000).
+        // - Reds (#F44442, #FD7874, #FC3C3C) map to BOOX Notes' native red (#FF6163); orange-reds (#FC846C) to #FF4400.
+        // - Bright lemon yellows (#FDF152, #FCFC54) map to #F0FF00; warm gold yellows (#EDCB72, #FFD600) to #FFAA00.
+        // - True purples (#9D4EDD) map to #9338BE; hot pinks/magentas (#FC6CB4) to #EE00FF.
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF111111.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF8D99AE.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD4E9F9.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD3E9F9.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFF4F2DD.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_MID_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF8D99AE.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_LIGHT_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD4E9F9.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_LIGHT_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD3E9F9.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_LIGHT_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFF4F2DD.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_LIGHT_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C24.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3B3E63.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF24243C.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF283878.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFE4CC6C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFEDCB72.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFFD600.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_LEMON_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFDF152.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF80DBFA.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF54CCFC.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_AQUA, RawDrawingGeometry.hardwarePreviewColor(0xFFBADFEE.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_AQUA, RawDrawingGeometry.hardwarePreviewColor(0xFFCCE4FC.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFF44442.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFD7874.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC3C3C.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_ORANGE_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFD7874.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_ORANGE_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC846C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_PURPLE, RawDrawingGeometry.hardwarePreviewColor(0xFF9D4EDD.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_VIOLET, RawDrawingGeometry.hardwarePreviewColor(0xFFFC6CB4.toInt(), eraser = false))
         // Zero-alpha input is still returned opaque in the matching vivid BOOX color.
         assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0x000077B6, eraser = false))
     }
 
     @Test
-    fun allKaleidoPaletteCrayonsMapToVerifiedPureChromaBooxHardwareColors() {
+    fun allKaleidoPaletteCrayonsMapToVerifiedBooxNotes16Palette() {
         val expected = mapOf(
             "red" to RawDrawingGeometry.HW_RED,
             "orange" to RawDrawingGeometry.HW_ORANGE_RED,
@@ -124,12 +131,12 @@ class RawDrawingGeometryTest {
             "sky_blue" to RawDrawingGeometry.HW_AQUA,
             "ice_blue" to RawDrawingGeometry.HW_SKY_BLUE,
             "royal_blue" to RawDrawingGeometry.HW_NAVY_BLUE,
-            "lavender" to RawDrawingGeometry.HW_VIOLET,
+            "lavender" to RawDrawingGeometry.HW_PURPLE,
             "magenta" to RawDrawingGeometry.HW_VIOLET,
             "peppa_pink" to RawDrawingGeometry.HW_VIOLET,
             "peach" to RawDrawingGeometry.HW_ORANGE_RED,
             "caramel" to RawDrawingGeometry.HW_ORANGE_RED,
-            "warm_gray" to RawDrawingGeometry.HW_DARK_GRAY,
+            "warm_gray" to RawDrawingGeometry.HW_MID_GRAY,
             "black" to RawDrawingGeometry.HW_BLACK,
             "white" to RawDrawingGeometry.HW_WHITE,
         )
@@ -139,29 +146,33 @@ class RawDrawingGeometryTest {
                 "${crayon.id} mapped to #${Integer.toHexString(mapped)} outside BOOX_HARDWARE_PALETTE",
                 mapped in RawDrawingGeometry.BOOX_HARDWARE_PALETTE,
             )
-            assertEquals("${crayon.id} expected vivid BOOX color", expected[crayon.id], mapped)
+            assertEquals("${crayon.id} expected BOOX Notes native color", expected[crayon.id], mapped)
         }
     }
 
     @Test
-    fun booxHardwarePaletteGuaranteesFullAlphaAndPureChromaForAllChromaticColors() {
+    fun booxHardwarePaletteMatchesExact16NativeNotesColorsOpaque() {
+        val expected16 = setOf(
+            0xFF000000.toInt(),
+            0xFF404040.toInt(),
+            0xFF808080.toInt(),
+            0xFFC0C0C0.toInt(),
+            0xFFFFFFFF.toInt(),
+            0xFFFF6163.toInt(),
+            0xFFFF4400.toInt(),
+            0xFFFFAA00.toInt(),
+            0xFFF0FF00.toInt(),
+            0xFF00B036.toInt(),
+            0xFF008000.toInt(),
+            0xFF00F0FF.toInt(),
+            0xFF00AAFF.toInt(),
+            0xFF000084.toInt(),
+            0xFF9338BE.toInt(),
+            0xFFEE00FF.toInt(),
+        )
+        assertEquals(expected16, RawDrawingGeometry.BOOX_HARDWARE_PALETTE)
         for (c in RawDrawingGeometry.BOOX_HARDWARE_PALETTE) {
             assertEquals("must be fully opaque", 0xFF, (c ushr 24) and 0xFF)
-            val r = (c ushr 16) and 0xFF
-            val g = (c ushr 8) and 0xFF
-            val b = c and 0xFF
-            val isNeutral = r == g && g == b
-            if (!isNeutral) {
-                assertEquals(
-                    "chromatic BOOX color #${Integer.toHexString(c)} must have S=1.0 (min channel == 0)",
-                    0,
-                    minOf(r, g, b),
-                )
-                assertTrue(
-                    "chromatic BOOX color #${Integer.toHexString(c)} must have max channel >= 0x80",
-                    maxOf(r, g, b) >= 0x80,
-                )
-            }
         }
     }
 }

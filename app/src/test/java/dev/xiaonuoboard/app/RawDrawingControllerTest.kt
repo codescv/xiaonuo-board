@@ -991,4 +991,48 @@ class RawDrawingControllerTest {
         assertEquals(listOf(RawDrawingController.COLOR_BURST_IDLE_FLUSH_MS), r.scheduler.delays)
         assertTrue(r.c.isPenUpFlushPending)
     }
+
+    @Test
+    fun chromeResumeDelayUsesFast150msOnlyForIdleFastChromeWithoutInFlightCanvasFlush() {
+        // Pure DU chrome tap while live with no burst: resumes in 150 ms instead of 500 ms.
+        assertEquals(
+            RawDrawingController.FAST_CHROME_RESUME_DELAY_MS,
+            RawDrawingController.chromeResumeDelayMs(
+                fastChrome = true,
+                wasLive = true,
+                hadBurst = false,
+                defaultResumeMs = RawDrawingController.COLOR_RESUME_DELAY_MS,
+            ),
+        )
+        // A prior GU burst flush already hid the pen layer (wasLive=false) → keep full 500 ms settle!
+        assertEquals(
+            RawDrawingController.COLOR_RESUME_DELAY_MS,
+            RawDrawingController.chromeResumeDelayMs(
+                fastChrome = true,
+                wasLive = false,
+                hadBurst = false,
+                defaultResumeMs = RawDrawingController.COLOR_RESUME_DELAY_MS,
+            ),
+        )
+        // Burst flushed during chromeRefresh (hadBurst=true) → keep full 500 ms settle!
+        assertEquals(
+            RawDrawingController.COLOR_RESUME_DELAY_MS,
+            RawDrawingController.chromeResumeDelayMs(
+                fastChrome = true,
+                wasLive = true,
+                hadBurst = true,
+                defaultResumeMs = RawDrawingController.COLOR_RESUME_DELAY_MS,
+            ),
+        )
+        // Heavy NORMAL (GU) chrome change (16-color tray / PiP / dialog) → keep full 500 ms settle!
+        assertEquals(
+            RawDrawingController.COLOR_RESUME_DELAY_MS,
+            RawDrawingController.chromeResumeDelayMs(
+                fastChrome = false,
+                wasLive = true,
+                hadBurst = false,
+                defaultResumeMs = RawDrawingController.COLOR_RESUME_DELAY_MS,
+            ),
+        )
+    }
 }

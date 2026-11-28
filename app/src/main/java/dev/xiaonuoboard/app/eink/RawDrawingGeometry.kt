@@ -48,22 +48,18 @@ object RawDrawingGeometry {
     /**
      * Color sent to the BOOX firmware hardware scribble layer (`TouchHelper.setStrokeColor`).
      *
-     * Verified on BOOX Nova Air C (Kaleido Plus, Android 11, `SDMDevice`) against BOOX's built-in
-     * Notes app and `OnyxPenDemo`:
-     *  - Kaleido Plus's fast hardware scribble pipeline washes out or drops desaturated / low-value
-     *    mid-tones (such as Bluey's `#3C3C6C`, `#24243C`, darkened `#6C5C31` / `#38687C`, or
-     *    off-black `#111111`), because non-zero `min(R,G,B)` or sub-threshold channels don't drive
-     *    the fast 1-bit-per-CFA-subpixel waveform cleanly.
-     *  - BOOX's built-in Notes app avoids this by using a curated vivid hardware palette where
-     *    every chromatic color has full chroma (`S = 1.0`, `min(R,G,B) == 0`, `max >= 0x80`) and
-     *    neutrals use exact `#000000` / `#404040` / `#FFFFFF` — specifically `#00F0FF` (aqua),
-     *    `#EE00FF` (violet), `#000084` (navy), `#FF4400` (orange-red), `#404040` (dark gray),
-     *    `#00AAFF` (sky blue), `#00B036` (green), `#008000` (dark green), `#FFAA00` (gold yellow),
-     *    `#FF0000` (red), and `#000000` (black).
-     *  - Mapping every crayon color onto the closest hue/tone in BOOX Notes' proven vivid palette
-     *    gives instant real-color live ink under the pen tip (never black-then-flash and never
-     *    invisible/faint), while the settled `SurfaceView` repaint later restores the exact pastel
-     *    shade and crisp 1-bit line art on top.
+     * Verified verbatim against BOOX built-in Notes' complete 16-color hardware palette on BOOX
+     * Nova Air C (Kaleido Plus, Android 11, `SDMDevice`):
+     *  - Neutrals: `#000000` (black), `#404040` (dark gray), `#808080` (mid gray),
+     *    `#C0C0C0` (light gray), `#FFFFFF` (white).
+     *  - Chromatics: `#FF6163` (red), `#FF4400` (orange-red), `#FFAA00` (gold orange),
+     *    `#F0FF00` (lemon yellow), `#00B036` (green), `#008000` (dark green),
+     *    `#00F0FF` (aqua), `#00AAFF` (sky blue), `#000084` (navy blue),
+     *    `#9338BE` (purple), `#EE00FF` (bright violet).
+     *  - Every crayon color maps onto the perceptually closest entry of these exact 16 hardware
+     *    colors (and all 16 are exact fixed points), guaranteeing bold zero-latency real-color
+     *    live ink while avoiding washed-out mid-tones and false blue tints on near-whites or
+     *    dark charcoals.
      */
     fun hardwarePreviewColor(argb: Int, eraser: Boolean): Int {
         if (eraser) return HW_WHITE
@@ -82,11 +78,17 @@ object RawDrawingGeometry {
         val s = if (maxC == 0f) 0f else delta / maxC
         val lum = 0.299f * rf + 0.587f * gf + 0.114f * bf
 
-        // Near-black, neutral grays, and very pale off-whites (e.g. Bluey #D4E9F9, cream #F4F2DD):
-        // keep them neutral (#000000 / #404040) instead of over-saturating faint blue tints into neon aqua.
+        // Near-black, neutral grays, and very pale off-whites (e.g. Bluey #D4E9F9 -> #C0C0C0,
+        // warm gray #8D99AE -> #808080, dark gray #404040 -> #404040): keep neutral instead of
+        // over-saturating faint blue tints into neon aqua.
         if (v <= 0.16f) return HW_BLACK
         if (s < 0.18f || (s < 0.21f && v < 0.85f)) {
-            return if (v < 0.22f) HW_BLACK else HW_DARK_GRAY
+            return when {
+                lum < 0.18f -> HW_BLACK
+                lum < 0.42f -> HW_DARK_GRAY
+                lum < 0.72f -> HW_MID_GRAY
+                else -> HW_LIGHT_GRAY
+            }
         }
 
         // Dark low-chroma charcoal/slate tones (e.g. Bluey #3B3E63 / #3C3C6C / #24243C):
@@ -113,49 +115,55 @@ object RawDrawingGeometry {
         }
 
         return when {
-            hDeg < 8f || hDeg >= 342f -> when {
-                hDeg >= 342f && b > g + 15 -> HW_VIOLET
-                lum > 0.55f -> HW_ORANGE_RED
-                else -> HW_RED
-            }
+            hDeg < 8f || hDeg >= 342f -> if (hDeg >= 342f && b > g + 15) HW_VIOLET else HW_RED
             hDeg < 35f -> HW_ORANGE_RED
-            hDeg < 72f -> HW_GOLD_YELLOW
+            hDeg < 54f -> HW_GOLD_YELLOW
+            hDeg < 75f -> if (v >= 0.85f && s >= 0.55f) HW_LEMON_YELLOW else HW_GOLD_YELLOW
             hDeg < 172f -> if (v < 0.56f) HW_DARK_GREEN else HW_GREEN
             hDeg < 194f -> HW_AQUA
             hDeg < 222f -> if (v < 0.85f || s > 0.35f) HW_SKY_BLUE else HW_AQUA
             hDeg < 268f -> HW_NAVY_BLUE
+            hDeg < 292f -> HW_PURPLE
             else -> HW_VIOLET
         }
     }
 
     const val ERASER_SCALE = 1.5f
 
-    /** Proven BOOX built-in Notes / OnyxPenDemo hardware scribble colors (verified on Nova Air C). */
+    /** Complete 16-color BOOX built-in Notes native hardware palette (verified on Nova Air C). */
     const val HW_BLACK = 0xFF000000.toInt()
     const val HW_DARK_GRAY = 0xFF404040.toInt()
+    const val HW_MID_GRAY = 0xFF808080.toInt()
+    const val HW_LIGHT_GRAY = 0xFFC0C0C0.toInt()
     const val HW_WHITE = 0xFFFFFFFF.toInt()
-    const val HW_RED = 0xFFFF0000.toInt()
+    const val HW_RED = 0xFFFF6163.toInt()
     const val HW_ORANGE_RED = 0xFFFF4400.toInt()
     const val HW_GOLD_YELLOW = 0xFFFFAA00.toInt()
+    const val HW_LEMON_YELLOW = 0xFFF0FF00.toInt()
     const val HW_GREEN = 0xFF00B036.toInt()
     const val HW_DARK_GREEN = 0xFF008000.toInt()
     const val HW_AQUA = 0xFF00F0FF.toInt()
     const val HW_SKY_BLUE = 0xFF00AAFF.toInt()
     const val HW_NAVY_BLUE = 0xFF000084.toInt()
+    const val HW_PURPLE = 0xFF9338BE.toInt()
     const val HW_VIOLET = 0xFFEE00FF.toInt()
 
     val BOOX_HARDWARE_PALETTE: Set<Int> = setOf(
         HW_BLACK,
         HW_DARK_GRAY,
+        HW_MID_GRAY,
+        HW_LIGHT_GRAY,
         HW_WHITE,
         HW_RED,
         HW_ORANGE_RED,
         HW_GOLD_YELLOW,
+        HW_LEMON_YELLOW,
         HW_GREEN,
         HW_DARK_GREEN,
         HW_AQUA,
         HW_SKY_BLUE,
         HW_NAVY_BLUE,
+        HW_PURPLE,
         HW_VIOLET,
     )
 }

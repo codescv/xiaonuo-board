@@ -123,11 +123,11 @@ class OnyxTouchHelperBackend(
 
     override fun setRenderEnabled(enabled: Boolean): Boolean =
         call("setRawDrawingRenderEnabled") {
-            // Latch style → width → color before entering PEN_DRAWING (2) (matching OnyxPenDemo's
-            // PenManager) and re-assert after in case firmware resets attributes on resume.
+            // Latch brush → style → width → color immediately before entering PEN_DRAWING (2),
+            // matching OnyxPenDemo's PenManager.applyBrushTouchHelperParams (setRawDrawingRenderEnabled
+            // does not call resetPenDefaultRawDrawing, so avoid redundant post-resume IPCs).
             if (enabled) applyStroke(it)
             it.setRawDrawingRenderEnabled(enabled)
-            if (enabled) applyStroke(it)
         }
 
     override fun setStroke(width: Float, color: Int, pressureSensitive: Boolean): Boolean {

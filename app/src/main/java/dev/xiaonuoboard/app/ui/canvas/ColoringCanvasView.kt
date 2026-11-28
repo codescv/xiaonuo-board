@@ -438,9 +438,17 @@ class ColoringCanvasView(
         }
         OnyxEinkBridge.refreshHostUi(hostView, mode)
         OnyxEinkBridge.enablePost(this, 1)
-        DiagLog.log(DiagLog.DRAW) { "chromeRefresh mode=${mode.name} wasLive=$wasLive hadBurst=$hadBurst rawOpen=${raw.isOpen}" }
+        val resumeMs = RawDrawingController.chromeResumeDelayMs(
+            fastChrome = mode == EinkMode.FAST,
+            wasLive = wasLive,
+            hadBurst = hadBurst,
+            defaultResumeMs = OnyxEinkBridge.penResumeDelayMs,
+        )
+        DiagLog.log(DiagLog.DRAW) {
+            "chromeRefresh mode=${mode.name} wasLive=$wasLive hadBurst=$hadBurst resumeMs=$resumeMs rawOpen=${raw.isOpen}"
+        }
         if (raw.isOpen && raw.isEnabled && !raw.isRenderEnabled) {
-            raw.schedulePenLayerResume()
+            raw.schedulePenLayerResume(resumeMs)
         } else if (!raw.isOpen && surfaceValid && OnyxEinkBridge.isTouchHelperAvailable) {
             scheduleInitialRawArm()
         }

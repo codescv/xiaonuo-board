@@ -528,6 +528,8 @@ class RawDrawingController(
         const val COLOR_RESUME_DELAY_MS = 500L
         /** Monochrome E-Ink settle time (`NoteConstant.COMMON_PEN_RESUME_DELAY_TIME_MS`). */
         const val MONO_RESUME_DELAY_MS = 150L
+        /** Fast B&W chrome-only (`DU`) settle delay when no canvas `GU` repaint is in flight. */
+        const val FAST_CHROME_RESUME_DELAY_MS = 150L
         /** Default pen-layer resume delay after a structural `hidePenLayer()` refresh (never 16 ms!). */
         const val RENDER_RESUME_DELAY_MS = MONO_RESUME_DELAY_MS
         /** Upper-bound resume delay for color devices / fallback. */
@@ -561,6 +563,23 @@ class RawDrawingController(
             eraser -> ERASER_BURST_IDLE_FLUSH_MS
             stayInsideLines -> CLIP_BURST_IDLE_FLUSH_MS
             else -> COLOR_BURST_IDLE_FLUSH_MS
+        }
+
+        /**
+         * Resume delay after a Compose chrome refresh: uses fast [FAST_CHROME_RESUME_DELAY_MS]
+         * (150 ms) ONLY when this chrome refresh itself hid a live pen layer for a pure B&W `DU`
+         * highlight with no canvas `GU` burst in flight; otherwise preserves [defaultResumeMs]
+         * (500 ms on color) so an in-flight `GU` canvas repaint is never cut short.
+         */
+        fun chromeResumeDelayMs(
+            fastChrome: Boolean,
+            wasLive: Boolean,
+            hadBurst: Boolean,
+            defaultResumeMs: Long,
+        ): Long = if (fastChrome && wasLive && !hadBurst) {
+            minOf(FAST_CHROME_RESUME_DELAY_MS, defaultResumeMs)
+        } else {
+            defaultResumeMs
         }
     }
 }
