@@ -715,11 +715,38 @@ class RawDrawingControllerTest {
 
     @Test
     fun debounceCoversBurstPenLiftsWithoutFeelingSluggish() {
-        assertEquals(300L, RawDrawingController.PEN_UP_FLUSH_DELAY_MS)
+        assertEquals(500L, RawDrawingController.PEN_UP_FLUSH_DELAY_MS)
         assertEquals(500L, RawDrawingController.COLOR_RESUME_DELAY_MS)
         assertEquals(150L, RawDrawingController.MONO_RESUME_DELAY_MS)
         assertTrue("never 16ms: must let EPD waveform finish", RawDrawingController.RENDER_RESUME_DELAY_MS >= 150L)
         assertTrue(RawDrawingController.RENDER_RESUME_FALLBACK_MS >= RawDrawingController.RENDER_RESUME_DELAY_MS)
+    }
+
+    @Test
+    fun colorBurstFlushHidesPenLayerRepaintsAndResumesAfterColorSettleDelay() {
+        val r = Rig(resumeDelay = { RawDrawingController.COLOR_RESUME_DELAY_MS }).armed()
+        r.flushLikeCanvas = true
+        r.backend.log.clear()
+        // Rapid consecutive strokes stay continuously live with zero hide/resume pauses.
+        r.canvasStroke(10f, 10f)
+        r.canvasStroke(30f, 10f)
+        assertEquals(0, r.flushes)
+        assertTrue("pen layer stayed live mid-burst", r.backend.log.isEmpty())
+        assertEquals(listOf(500L, 500L), r.scheduler.delays)
+
+        // 500 ms idle: flush hides pen layer so SurfaceFlinger unfreezes and shows real color.
+        r.scheduler.delays.clear()
+        r.scheduler.runAll()
+        assertEquals(1, r.flushes)
+        assertFalse(r.c.isPenUpFlushPending)
+        assertFalse("pen layer hidden for reliable GU color repaint", r.c.isRenderEnabled)
+        assertEquals(listOf("render=false"), r.backend.log)
+        assertEquals(listOf(500L), r.scheduler.delays)
+
+        // 500 ms settle complete: pen layer resumes cleanly.
+        r.scheduler.runAll()
+        assertTrue(r.c.isRenderEnabled)
+        assertEquals(listOf("render=false", "render=true"), r.backend.log)
     }
 
     @Test

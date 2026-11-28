@@ -49,15 +49,20 @@ import kotlin.math.floor
  *  1. **FULL mode (TouchHelper raw drawing)**:
  *     - Stylus MotionEvents are suppressed in [dispatchTouchEvent] while raw drawing is armed so
  *       there is no duplicate 240 Hz input race (while still feeding 3-miss self-healing).
- *     - Live strokes draw directly via BOOX EPD firmware (`hwPreview = true`), with pale pastel
- *       colors contrast-boosted by [RawDrawingGeometry.hardwarePreviewColor].
- *     - After [RawDrawingController.PEN_UP_FLUSH_DELAY_MS] (300 ms) of pen idle, [flushPenBurst]
- *       repaints the burst rect directly onto the `SurfaceView` via
- *       [OnyxEinkBridge.withHandwritingRepaint] (`UpdateMode.HAND_WRITING_REPAINT_MODE`) **without**
- *       calling `hidePenLayer()` (`PEN_PAUSE`) — zero pause, zero dead window between strokes.
+ *     - Live strokes draw directly via BOOX EPD firmware (`hwPreview = true`) using solid
+ *       constant-width `STROKE_STYLE_PENCIL` in exact `Color.BLACK` (`0xFF000000`, eraser white)
+ *       so every crayon color (including yellow, pastels, and dark navy) has bold 300 PPI
+ *       zero-latency visibility even at light child pressure.
+ *     - After [RawDrawingController.PEN_UP_FLUSH_DELAY_MS] (500 ms) of pen idle, [flushPenBurst]
+ *       commits the burst rect onto the `SurfaceView`. On Kaleido color E-Ink and Android ≤ 11
+ *       (where `HAND_WRITING_REPAINT_MODE` is silently swallowed while `PEN_DRAWING` freezes
+ *       SurfaceFlinger), it hides the pen layer, pushes a crisp partial `NORMAL` (`GU`) color
+ *       repaint via [OnyxEinkBridge.withForcedPost], and resumes after
+ *       [OnyxEinkBridge.penResumeDelayMs] (500 ms color / 150 ms mono); monochrome Android 12+
+ *       devices with a valid `HAND_WRITING_REPAINT_MODE` constant use zero-pause repaint.
  *     - Structural updates (undo, reset, fill, clearGhosting, ghost toggle, zoom/pan, cancelled
  *       stroke) hide the pen layer, push the update via [OnyxEinkBridge.withForcedPost], and resume
- *       after [OnyxEinkBridge.penResumeDelayMs] (500 ms color Kaleido / 150 ms monochrome).
+ *       after [OnyxEinkBridge.penResumeDelayMs].
  *  2. **EPD_ONLY mode**:
  *     - Software strokes enter transient `ANIMATION_QUALITY` ([OnyxEinkBridge.enterFastStroke]),
  *       throttle partial surface blits to ≤30 Hz ([EPD_STROKE_FRAME_INTERVAL_MS] = 33 ms) to avoid
@@ -162,6 +167,7 @@ class ColoringCanvasView(
     private var lastFlushInfo: String? = null
 
     private var currentTool: Tool = controller.tool
+    private var currentColor: Int = controller.color
     private var excludeWindowRects: List<Rect> = emptyList()
     private val screenLoc = IntArray(2)
     private val windowLoc = IntArray(2)
@@ -334,8 +340,8 @@ class ColoringCanvasView(
             override fun cancel(task: Runnable) { removeCallbacks(task) }
         },
         onFailure = { reason -> OnyxEinkBridge.reportRawDrawingFailure(reason) },
-        // End of a pen burst (300 ms idle, tool/color/brush change, raw off, finger gesture, failure):
-        // zero-pause HAND_WRITING_REPAINT_MODE surface blit when raw stays live.
+        // End of a pen burst (500 ms idle, tool/color/brush change, raw off, finger gesture, failure):
+        // commits the real Kaleido color & crisp outlines onto the SurfaceView.
         onPenUpFlush = { flushPenBurst() },
         resumeDelayMs = { OnyxEinkBridge.penResumeDelayMs },
         requireSurface = true,
@@ -360,11 +366,18 @@ class ColoringCanvasView(
      * confirmation covers the canvas so the pen layer never draws over it.
      */
     fun syncToolState(tool: Tool, brush: BrushSize, color: Int, suspendRaw: Boolean) {
+        val colorChanged = color != currentColor
         currentTool = tool
+        currentColor = color
+        if (colorChanged && !penBurst.isEmpty) {
+            // Hardware preview uses solid black for all crayons; still flush any pending burst
+            // immediately when the user switches logical crayon color.
+            raw.flushPenUpNow()
+        }
         raw.setStroke(
             rawStrokeWidthPx(tool, brush),
             RawDrawingGeometry.hardwarePreviewColor(color, eraser = tool == Tool.ERASER),
-            tool == Tool.CRAYON,
+            pressureSensitive = false,
         )
         raw.setSuspended(suspendRaw)
         raw.setToolAllowsRaw(tool == Tool.CRAYON || tool == Tool.ERASER)
@@ -804,16 +817,20 @@ class ColoringCanvasView(
             flushPenBurst()
             raw.schedulePenLayerResume()
         } else {
-            // Keep the pen layer live; zero-pause HAND_WRITING_REPAINT_MODE fires after 300 ms idle.
+            // Keep the pen layer live across rapid strokes; commit the burst in real color after 500 ms idle.
             raw.schedulePenUpFlush()
         }
     }
 
     /**
-     * Zero-pause pen-up repaint of the accumulated burst onto the `SurfaceView`.
+     * Pen-up burst commit onto the `SurfaceView`.
      *
-     * When `raw.isEnabled && raw.isRenderEnabled`, paints via `HAND_WRITING_REPAINT_MODE` without
-     * ever calling `hidePenLayer()` (`PEN_PAUSE`), keeping the hardware pen layer continuously live.
+     * On Kaleido color E-Ink and Android ≤ 11 (e.g. BOOX Nova Air C, where `HAND_WRITING_REPAINT_MODE`
+     * is silently swallowed while `PEN_DRAWING` freezes SurfaceFlinger), cleanly hides the temporary
+     * hardware trace (`hidePenLayer()`), posts a crisp partial `NORMAL` (`GU`) color repaint via
+     * [OnyxEinkBridge.withForcedPost], and resumes `PEN_DRAWING` after [OnyxEinkBridge.penResumeDelayMs].
+     * On monochrome Android 12+ devices with a valid `HAND_WRITING_REPAINT_MODE` constant, keeps the
+     * zero-pause repaint path.
      */
     private fun flushPenBurst() {
         if (hwPreview) return
@@ -832,15 +849,22 @@ class ColoringCanvasView(
             rect.width().toLong() * rect.height().toLong() * 100L >= sw.toLong() * sh.toLong() * PARTIAL_REFRESH_MAX_AREA_PERCENT
         ) null else rect
         val t0 = System.nanoTime()
-        val liveRepaint = raw.isEnabled && raw.isRenderEnabled
-        val label = if (liveRepaint) "HAND_WRITING_REPAINT" else flush.mode.name
+        val wasLive = raw.isEnabled && raw.isRenderEnabled
+        val zeroPause = wasLive && OnyxEinkBridge.shouldUseZeroPauseHandwritingRepaint
+        if (wasLive && !zeroPause) {
+            raw.hidePenLayer()
+        }
+        val label = if (zeroPause) "HAND_WRITING_REPAINT" else flush.mode.name
         if (DiagLog.enabled && !stats.active) {
             lastFlushInfo = "refresh=$label rect=${targetRect?.toShortString() ?: "FULL"}" + if (flush.viewRect.isEmpty) "" else " +trace"
         }
-        if (liveRepaint) {
+        if (zeroPause) {
             OnyxEinkBridge.withHandwritingRepaint(this) { renderToSurface(targetRect) }
         } else {
             OnyxEinkBridge.withForcedPost(this, flush.mode, forceUnfreeze = raw.isOpen) { renderToSurface(targetRect) }
+        }
+        if (wasLive && !zeroPause) {
+            raw.schedulePenLayerResume()
         }
         if (DiagLog.enabled && !stats.active && lastFlushInfo != null) {
             // No paint tiles needed upload (e.g. trace-only burst clipped by 不涂出线): still log it.
@@ -874,17 +898,18 @@ class ColoringCanvasView(
     }
 
     /**
-     * Hardware trace width in screen px: the brush (eraser ×1.5) diameter at the current zoom; for the
-     * pressure-sensitive crayon trace the firm-press (maximum) diameter.
+     * Hardware trace width in screen px: constant brush (eraser ×1.5) diameter at the current zoom.
+     * Uses constant-width `STROKE_STYLE_PENCIL` so light toddler strokes stay bold and visible
+     * (the committed crayon stroke in [controller] still applies full Wacom EMR pressure).
      */
     private fun rawStrokeWidthPx(tool: Tool, brush: BrushSize): Float =
-        RawDrawingGeometry.traceWidthPx(brush.radius, tool == Tool.ERASER, viewScale, pressureSensitive = tool == Tool.CRAYON)
+        RawDrawingGeometry.traceWidthPx(brush.radius, tool == Tool.ERASER, viewScale, pressureSensitive = false)
 
     private fun syncRawStrokeWidth() {
         raw.setStroke(
             rawStrokeWidthPx(currentTool, controller.brushSize),
             RawDrawingGeometry.hardwarePreviewColor(controller.color, eraser = currentTool == Tool.ERASER),
-            currentTool == Tool.CRAYON,
+            pressureSensitive = false,
         )
     }
 
@@ -1071,6 +1096,9 @@ class ColoringCanvasView(
             canvas.restore()
         } finally {
             try {
+                // Mirror OnyxPenDemo BaseRenderer.beforeUnlockCanvas so SurfaceView posting is
+                // explicitly unblocked at unlock time when a TouchHelper session is open.
+                if (raw.isOpen) OnyxEinkBridge.enablePost(this, 1)
                 holder.unlockCanvasAndPost(canvas)
             } catch (e: Throwable) {
                 DiagLog.log(DiagLog.DRAW, "unlockCanvasAndPost failed: ${e.javaClass.simpleName}: ${e.message}")
@@ -1289,7 +1317,7 @@ class ColoringCanvasView(
         /** Router pointer id for the TouchHelper raw pen stream (never a real MotionEvent id). */
         const val RAW_POINTER_ID = 0x7EAD_0001
         /** Extra margin around the hardware trace bounds for the pen-up refresh. */
-        private const val TRACE_PAD_PX = 6f
+        private const val TRACE_PAD_PX = 10f
         /** Throttle mid-stroke surface blits to ≤30 Hz on BOOX EPD so waveforms never pile up. */
         const val EPD_STROKE_FRAME_INTERVAL_MS = 33L
         /** Standard 60 Hz frame pacing off BOOX / in OFF mode. */

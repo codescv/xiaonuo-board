@@ -48,90 +48,23 @@ object RawDrawingGeometry {
     /**
      * Color sent to the BOOX firmware hardware scribble layer.
      *
-     * Two Kaleido Plus (`SDMDevice`) hardware-scribble quirks make strokes look invisible or very
-     * faint until the pen-up `SurfaceView` refresh:
-     *  1. **Near-black (`#111111`)**: Onyx's own `ColorUtils.isGrayColor` treats any `0 < R==G==B < 255`
-     *     as gray rather than black, bypassing BOOX's 300 PPI solid-black fast-scribble path. Snap
-     *     near-black (and dark neutral grays) to exact `Color.BLACK` (`0xFF000000`), matching BOOX
-     *     Notes and `OnyxPenDemo`.
-     *  2. **Yellow (`#FFD600`, `#FCF7D4`, `#FCE424`) & bright pastels**: Red + Green make up 88.6%
-     *     of perceived luminance, so capping HSV `V <= 0.72` alone still left yellow at `Y = 0.57–0.68`
-     *     (with both R & G > 128 — only the blue subpixel darkened on Kaleido's CFA). Scale `V`
-     *     directly by perceived luminance so every bright chromatic preview hits `Y <= 0.36`, matching
-     *     the contrast of red/blue/magenta; pen-up burst repaint replaces it with the exact true color.
+     * Verified directly on BOOX Nova Air C (Kaleido Plus, Android 11, `SDMDevice`):
+     *  - The hardware fast-scribble overlay draws via a low-latency DU/A2 waveform where non-black
+     *    RGB colors (dark navy `#3C3C6C`, near-black `#111111`, yellow `#FFD600`/`#E4CC6C`, sky
+     *    blue, coral, and even bright red `#F44442`) look very faint or completely invisible while
+     *    the pen is moving.
+     *  - Exact `Color.BLACK` (`0xFF000000`) drives all three RGB CFA subpixels at full 300 PPI
+     *    contrast on every BOOX device (matching BOOX Notes and `OnyxScribbleTouchHelperDemo`), so
+     *    every single crayon color produces a crisp, bold, zero-latency live trace while drawing.
+     *  - After [RawDrawingController.PEN_UP_FLUSH_DELAY_MS] (500 ms) of pen idle, `flushPenBurst()`
+     *    cleanly drops the temporary hardware trace (`hidePenLayer()`) and replaces it with the
+     *    exact rich Kaleido crayon color, Stay-Inside-Lines clipping, and crisp 1-bit line art.
+     *  - Eraser previews in opaque white (`0xFFFFFFFF`) to show paint being wiped away.
      */
-    fun hardwarePreviewColor(argb: Int, eraser: Boolean): Int {
-        if (eraser) return 0xFFFFFFFF.toInt()
-        val r = (argb ushr 16) and 0xFF
-        val g = (argb ushr 8) and 0xFF
-        val b = argb and 0xFF
-        val lum = (0.299f * r + 0.587f * g + 0.114f * b) / 255f
-
-        val rf = r / 255f
-        val gf = g / 255f
-        val bf = b / 255f
-        val maxC = maxOf(rf, gf, bf)
-        val minC = minOf(rf, gf, bf)
-        val delta = maxC - minC
-        val v = maxC
-        val s = if (maxC == 0f) 0f else delta / maxC
-
-        if (maxOf(r, g, b) <= PREVIEW_NEAR_BLACK_MAX_CHANNEL ||
-            (lum <= PREVIEW_NEAR_BLACK_MAX_LUM && s < PREVIEW_NEAR_BLACK_MAX_SAT)
-        ) {
-            return 0xFF000000.toInt()
-        }
-
-        if (s < PREVIEW_GRAY_SAT) {
-            return if (lum <= PREVIEW_DARK_GRAY_LUM) 0xFF000000.toInt() else PREVIEW_DARK_GRAY_ARGB
-        }
-
-        if (lum <= PREVIEW_MAX_LUM) return argb or (0xFF shl 24)
-
-        val h = when {
-            delta == 0f -> 0f
-            maxC == rf -> 60f * (((gf - bf) / delta) % 6f)
-            maxC == gf -> 60f * (((bf - rf) / delta) + 2f)
-            else -> 60f * (((rf - gf) / delta) + 4f)
-        }.let { if (it < 0f) it + 360f else it }
-
-        val newS = maxOf(s, PREVIEW_MIN_SAT)
-        val (ur, ug, ub) = hsvUnitRgb(h, newS)
-        val unitLum = 0.299f * ur + 0.587f * ug + 0.114f * ub
-        val newV = if (unitLum > 0f) minOf(v, PREVIEW_TARGET_LUM / unitLum) else v
-
-        val nr = kotlin.math.round(ur * newV * 255f).toInt().coerceIn(0, 255)
-        val ng = kotlin.math.round(ug * newV * 255f).toInt().coerceIn(0, 255)
-        val nb = kotlin.math.round(ub * newV * 255f).toInt().coerceIn(0, 255)
-        return (0xFF shl 24) or (nr shl 16) or (ng shl 8) or nb
-    }
-
-    /** Normalized RGB components in `[0, 1]` for HSV `(h, s, v = 1)`. */
-    private fun hsvUnitRgb(h: Float, s: Float): Triple<Float, Float, Float> {
-        val x = s * (1f - kotlin.math.abs((h / 60f) % 2f - 1f))
-        val m = 1f - s
-        val (r1, g1, b1) = when {
-            h < 60f -> Triple(s, x, 0f)
-            h < 120f -> Triple(x, s, 0f)
-            h < 180f -> Triple(0f, s, x)
-            h < 240f -> Triple(0f, x, s)
-            h < 300f -> Triple(x, 0f, s)
-            else -> Triple(s, 0f, x)
-        }
-        return Triple(r1 + m, g1 + m, b1 + m)
-    }
+    fun hardwarePreviewColor(argb: Int, eraser: Boolean): Int =
+        if (eraser) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
 
     const val ERASER_SCALE = 1.5f
-    private const val PREVIEW_NEAR_BLACK_MAX_CHANNEL = 45
-    private const val PREVIEW_NEAR_BLACK_MAX_LUM = 0.16f
-    private const val PREVIEW_NEAR_BLACK_MAX_SAT = 0.25f
-    private const val PREVIEW_GRAY_SAT = 0.08f
-    private const val PREVIEW_DARK_GRAY_LUM = 0.25f
-    /** Matches OnyxPenDemo's `StrokeColor.DARK_GRAY` (`#404040`). */
-    private const val PREVIEW_DARK_GRAY_ARGB = 0xFF404040.toInt()
-    private const val PREVIEW_MAX_LUM = 0.48f
-    private const val PREVIEW_TARGET_LUM = 0.36f
-    private const val PREVIEW_MIN_SAT = 0.55f
 }
 
 /**

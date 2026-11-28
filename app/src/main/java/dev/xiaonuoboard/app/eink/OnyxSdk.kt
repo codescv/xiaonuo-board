@@ -60,6 +60,17 @@ internal object OnyxSdk {
     /** True on Kaleido / color E-Ink BOOX hardware (requires longer pen-layer resume settle). */
     fun isColorDevice(): Boolean = DeviceInfoUtil.isColorDevice()
 
+    /**
+     * Reads `android.onyx.ViewUpdateHelper.HAND_WRITING_REPAINT_MODE` via reflection (0 when absent
+     * on older Android 11 BOOX firmware). Pure read-only probe for diagnostics & capability gating.
+     */
+    fun probeHandwritingRepaintMode(): Int = try {
+        val cls = Class.forName("android.onyx.ViewUpdateHelper")
+        cls.getField("HAND_WRITING_REPAINT_MODE").getInt(null)
+    } catch (_: Throwable) {
+        0
+    }
+
     fun enablePost(view: View, enable: Int) = EpdController.enablePost(view, enable)
 
     fun enablePostGlobal(enable: Int) = EpdController.enablePost(enable)

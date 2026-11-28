@@ -61,8 +61,9 @@ class OnyxTouchHelperBackend(
         }
     }
 
-    /** Applies stroke style → width → color in strict order (Onyx resets defaults on enable). */
+    /** Applies brush enable → stroke style → width → color in strict order (Onyx resets defaults on enable). */
     private fun applyStroke(h: TouchHelper) {
+        h.setBrushRawDrawingEnabled(true)
         h.setStrokeStyle(strokeStyle(lastPressureSensitive))
         h.setStrokeWidth(lastWidth)
         h.setStrokeColor(lastColor)

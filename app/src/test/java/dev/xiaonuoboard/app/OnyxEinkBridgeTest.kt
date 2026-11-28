@@ -57,11 +57,14 @@ class OnyxEinkBridgeTest {
         assertFalse(OnyxEinkBridge.enablePostGlobal(1))
         assertFalse(OnyxEinkBridge.resetViewUpdateMode(v))
         assertFalse(OnyxEinkBridge.isColorEink)
+        assertEquals(0, OnyxEinkBridge.handwritingRepaintMode)
+        assertFalse(OnyxEinkBridge.shouldUseZeroPauseHandwritingRepaint)
         assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs)
         assertEquals(OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = true))
         assertEquals(OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS, OnyxEinkBridge.penResumeDelayMs(isColor = false))
         assertEquals(500L, OnyxEinkBridge.COLOR_PEN_RESUME_DELAY_MS)
         assertEquals(150L, OnyxEinkBridge.MONO_PEN_RESUME_DELAY_MS)
+        assertTrue(OnyxEinkBridge.diagSummary().contains("hwRepaintMode=0"))
 
         var repaintRuns = 0
         OnyxEinkBridge.withHandwritingRepaint(v) { repaintRuns++ }
@@ -123,5 +126,23 @@ class OnyxEinkBridgeTest {
         } finally {
             OnyxEinkBridge.setSdkMode(original)
         }
+    }
+
+    @Test
+    fun zeroPauseHandwritingRepaintGateDisablesAndroid11AndColorDevices() {
+        // BOOX Nova Air C (Android 11 / SDK 30, Kaleido Plus color): always disabled even if field != 0.
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 30, isColor = true, hwRepaintMode = 0))
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 30, isColor = true, hwRepaintMode = 17))
+        // Android 11 monochrome: disabled (SurfaceFlinger swallows HAND_WRITING_REPAINT under PEN_DRAWING).
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 30, isColor = false, hwRepaintMode = 17))
+        // Android 12+ Kaleido color: disabled so temporary black trace is cleanly dropped for GU color repaint.
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 31, isColor = true, hwRepaintMode = 17))
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 33, isColor = true, hwRepaintMode = 17))
+        // Android 12+ monochrome without firmware constant: disabled.
+        assertFalse(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 33, isColor = false, hwRepaintMode = 0))
+        // Android 12+ monochrome with valid non-zero firmware constant: enabled.
+        assertTrue(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 31, isColor = false, hwRepaintMode = 17))
+        assertTrue(OnyxEinkBridge.useZeroPauseHandwritingRepaint(sdkInt = 34, isColor = false, hwRepaintMode = 17))
+        assertFalse("pure gate never touches Onyx SDK", OnyxEinkBridge.sdkTouched)
     }
 }

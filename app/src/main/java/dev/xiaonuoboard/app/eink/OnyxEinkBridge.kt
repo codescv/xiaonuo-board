@@ -109,6 +109,31 @@ object OnyxEinkBridge {
     var isColorEink: Boolean = false
         private set
 
+    /** Reflected `android.onyx.ViewUpdateHelper.HAND_WRITING_REPAINT_MODE` value (0 if absent). */
+    @Volatile
+    var handwritingRepaintMode: Int = 0
+        private set
+
+    /**
+     * Whether zero-pause `UpdateMode.HAND_WRITING_REPAINT_MODE` (posting onto the `SurfaceView`
+     * while `PEN_DRAWING` remains active without calling `hidePenLayer()`) is safe and effective.
+     *
+     * Verified on BOOX Nova Air C (Android 11 / API 30, Kaleido Plus, `SDMDevice`): posting with
+     * `HAND_WRITING_REPAINT_MODE` while `PEN_DRAWING (2)` is active is silently swallowed by
+     * SurfaceFlinger until `leaveScribbleMode` + `PEN_PAUSE` unfreezes it. On Kaleido color E-Ink
+     * we also always drop the temporary black hardware trace cleanly via `hidePenLayer()` so the
+     * full `GU` color repaint replaces it with zero residual trace. Only monochrome Android 12+
+     * (API ≥ 31) BOOX devices defining a non-zero `HAND_WRITING_REPAINT_MODE` constant use it.
+     */
+    internal fun useZeroPauseHandwritingRepaint(
+        sdkInt: Int,
+        isColor: Boolean,
+        hwRepaintMode: Int,
+    ): Boolean = sdkInt >= Build.VERSION_CODES.S && !isColor && hwRepaintMode != 0
+
+    val shouldUseZeroPauseHandwritingRepaint: Boolean
+        get() = useZeroPauseHandwritingRepaint(Build.VERSION.SDK_INT, isColorEink, handwritingRepaintMode)
+
     /** Pure helper for the pen-layer resume settle delay (unit-tested). */
     internal fun penResumeDelayMs(isColor: Boolean): Long =
         if (isColor) COLOR_PEN_RESUME_DELAY_MS else MONO_PEN_RESUME_DELAY_MS
@@ -150,6 +175,7 @@ object OnyxEinkBridge {
         }
         maxPressure = try { OnyxSdk.maxTouchPressure() } catch (_: Throwable) { 0f }
         isColorEink = try { OnyxSdk.isColorDevice() } catch (_: Throwable) { false }
+        handwritingRepaintMode = try { OnyxSdk.probeHandwritingRepaintMode() } catch (_: Throwable) { 0 }
         touchHelperReady = try {
             Build.SUPPORTED_ABIS.orEmpty().contains("arm64-v8a") && OnyxSdk.hasStylus(app)
         } catch (t: Throwable) {
@@ -159,7 +185,8 @@ object OnyxEinkBridge {
         }
         DiagLog.log(
             DiagLog.ONYX,
-            "init ok: device=$deviceInfo color=$isColorEink penResumeDelayMs=$penResumeDelayMs " +
+            "init ok: device=$deviceInfo color=$isColorEink hwRepaintMode=$handwritingRepaintMode " +
+                "zeroPauseRepaint=$shouldUseZeroPauseHandwritingRepaint penResumeDelayMs=$penResumeDelayMs " +
                 "touchHelperReady=$touchHelperReady maxTouchPressure=$maxPressure",
         )
     }
@@ -184,6 +211,7 @@ object OnyxEinkBridge {
         append("  sdk=").append(SDK_VERSIONS)
         append(" device=").append(deviceInfo ?: "-")
         append(" color=").append(isColorEink)
+        append(" hwRepaintMode=").append(handwritingRepaintMode)
         append(" maxTouchPressure=").append(maxPressure).append('\n')
         append("  initFailure=").append(failure ?: "-")
         append(" rawDrawingFailure=").append(rawDrawingFailure ?: "-")

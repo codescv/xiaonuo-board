@@ -100,7 +100,7 @@ class RawDrawingController(
     private val sink: RawStrokeSink,
     private val scheduler: UiScheduler,
     private val onFailure: (String) -> Unit = {},
-    /** The pen burst is over (or must end now): repaint its strokes onto the surface (zero-pause via HAND_WRITING_REPAINT_MODE). */
+    /** The pen burst is over (or must end now): repaint its strokes onto the surface in real color. */
     private val onPenUpFlush: () -> Unit = {},
     /** Delay before re-enabling the hardware pen layer after a structural `hidePenLayer()` refresh (500ms color / 150ms mono). */
     private val resumeDelayMs: () -> Long = { RENDER_RESUME_DELAY_MS },
@@ -532,10 +532,11 @@ class RawDrawingController(
         /** Upper-bound resume delay for color devices / fallback. */
         const val RENDER_RESUME_FALLBACK_MS = COLOR_RESUME_DELAY_MS
         /**
-         * Pen idle before a burst of hardware-drawn strokes gets its zero-pause `HAND_WRITING_REPAINT_MODE`
-         * colour repaint onto the SurfaceView. Because the repaint never hides the pen layer, 300 ms
-         * settles strokes snappily with real color, region clipping, and crisp black lines.
+         * Pen idle before a burst of hardware-drawn strokes is committed to the `SurfaceView` in full
+         * color (matching Onyx `PenConstant.DEFAULT_PEN_UP_REFRESH_TIME_MS = 500`). Rapid consecutive
+         * strokes (<500 ms apart) cancel this timer so hardware raw drawing never pauses mid-burst;
+         * lifting the pen for 0.5 s automatically reveals the true Kaleido color and crisp outlines.
          */
-        const val PEN_UP_FLUSH_DELAY_MS = 300L
+        const val PEN_UP_FLUSH_DELAY_MS = 500L
     }
 }
