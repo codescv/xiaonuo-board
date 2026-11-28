@@ -80,11 +80,20 @@ object RawDrawingGeometry {
         val delta = maxC - minC
         val v = maxC
         val s = if (maxC == 0f) 0f else delta / maxC
+        val lum = 0.299f * rf + 0.587f * gf + 0.114f * bf
 
-        // Near-black and neutral grays (matches BOOX Notes #000000 & #404040).
+        // Near-black, neutral grays, and very pale off-whites (e.g. Bluey #D4E9F9, cream #F4F2DD):
+        // keep them neutral (#000000 / #404040) instead of over-saturating faint blue tints into neon aqua.
         if (v <= 0.16f) return HW_BLACK
-        if (s < 0.14f || (s < 0.20f && v < 0.85f)) {
+        if (s < 0.18f || (s < 0.21f && v < 0.85f)) {
             return if (v < 0.22f) HW_BLACK else HW_DARK_GRAY
+        }
+
+        // Dark low-chroma charcoal/slate tones (e.g. Bluey #3B3E63 / #3C3C6C / #24243C):
+        // on Kaleido Plus these read as black/charcoal on the swatch, so keep them dark neutral
+        // rather than vivid navy blue (true saturated blues have s > 0.50, e.g. #000084 / #283878).
+        if (v <= 0.45f && s <= 0.50f) {
+            return if (lum < 0.28f) HW_BLACK else HW_DARK_GRAY
         }
 
         val hDeg = when {
@@ -94,18 +103,21 @@ object RawDrawingGeometry {
             else -> 60f * (((rf - gf) / delta) + 4f)
         }.let { if (it < 0f) it + 360f else it }
 
-        // Very dark chromatic colors (e.g. Bluey #24243C dark navy or #3C3C24 dark olive).
+        // Very dark high-saturation chromatic colors.
         if (v < 0.30f) {
             return when {
-                hDeg in 205f..275f && s >= 0.30f -> HW_NAVY_BLUE
-                hDeg in 85f..172f && s >= 0.30f -> HW_DARK_GREEN
-                v < 0.22f -> HW_BLACK
-                else -> HW_DARK_GRAY
+                hDeg in 205f..275f && s > 0.50f -> HW_NAVY_BLUE
+                hDeg in 85f..172f && s > 0.50f -> HW_DARK_GREEN
+                else -> HW_BLACK
             }
         }
 
         return when {
-            hDeg < 8f || hDeg >= 342f -> if (hDeg >= 342f && b > g + 15) HW_VIOLET else HW_RED
+            hDeg < 8f || hDeg >= 342f -> when {
+                hDeg >= 342f && b > g + 15 -> HW_VIOLET
+                lum > 0.55f -> HW_ORANGE_RED
+                else -> HW_RED
+            }
             hDeg < 35f -> HW_ORANGE_RED
             hDeg < 72f -> HW_GOLD_YELLOW
             hDeg < 172f -> if (v < 0.56f) HW_DARK_GREEN else HW_GREEN

@@ -82,19 +82,31 @@ class RawDrawingGeometryTest {
             )
         }
 
-        // Problematic Bluey / Elsa / Kaleido colors map to vivid BOOX Notes hardware colors
-        // (never black-for-everything and never washed-out mid-tones).
+        // Problematic Bluey / Elsa / Kaleido colors map accurately without false blue tints:
+        // - Near-white pale tints (#D4E9F9, #D3E9F9, #F4F2DD) map to neutral dark gray (#404040), never blue.
+        // - Dark charcoal/slate (#3B3E63, #3C3C6C, #24243C) map to black (#000000), never blue.
+        // - True saturated blues (#000084, #283878, #2400FF) stay navy blue (#000084).
+        // - Light coral-red (#FD7874, #FC846C) maps to verified orange-red (#FF4400), distinct from bright red (#F44442 -> #FF0000).
         assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF111111.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF8D99AE.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C24.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF24243C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD4E9F9.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFD3E9F9.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFF4F2DD.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C24.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3B3E63.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF3C3C6C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_BLACK, RawDrawingGeometry.hardwarePreviewColor(0xFF24243C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_NAVY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF283878.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFE4CC6C.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFFD600.toInt(), eraser = false))
-        assertEquals(RawDrawingGeometry.HW_GOLD_YELLOW, RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_DARK_GRAY, RawDrawingGeometry.hardwarePreviewColor(0xFFFCF7D4.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF80DBFA.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_SKY_BLUE, RawDrawingGeometry.hardwarePreviewColor(0xFF54CCFC.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_AQUA, RawDrawingGeometry.hardwarePreviewColor(0xFFBADFEE.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_AQUA, RawDrawingGeometry.hardwarePreviewColor(0xFFCCE4FC.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFF44442.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC3C3C.toInt(), eraser = false))
+        assertEquals(RawDrawingGeometry.HW_ORANGE_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFD7874.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_ORANGE_RED, RawDrawingGeometry.hardwarePreviewColor(0xFFFC846C.toInt(), eraser = false))
         assertEquals(RawDrawingGeometry.HW_VIOLET, RawDrawingGeometry.hardwarePreviewColor(0xFFFC6CB4.toInt(), eraser = false))
         // Zero-alpha input is still returned opaque in the matching vivid BOOX color.

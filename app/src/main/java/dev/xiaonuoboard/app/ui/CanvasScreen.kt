@@ -158,36 +158,30 @@ fun CanvasScreen(
 
     val zoomLabel = if (zoom > 1.01f) "${String.format(Locale.US, "%.1f", zoom)}×" else null
     // Every piece of Compose chrome UI outside the SurfaceView canvas. While BOOX TouchHelper is
-    // in PEN_DRAWING (2), SurfaceFlinger freezes standard Activity window updates; whenever any
-    // toolbar / brush / palette / PiP / toast state changes, notify the canvas so it briefly
-    // pauses PEN_DRAWING, refreshes rootView in NORMAL (GU), and resumes after settle.
-    val chromeKey = listOf(
-        tool,
-        brush,
-        color,
-        stayInside,
-        stylusOnly,
-        ghost,
-        pipExpanded,
-        pipCollapsed,
-        showAllColors,
-        zoomLabel,
-        confirmReset,
-        message,
-    )
+    // in PEN_DRAWING (2), SurfaceFlinger freezes standard Activity window updates; whenever chrome
+    // changes, notify the canvas so it briefly pauses PEN_DRAWING, refreshes rootView, and resumes.
+    // Pure B&W selection border changes (tool/brush/color/toggles) use fast DU (~100 ms) so tapping
+    // a color swatch never triggers a colliding full-screen 500 ms GU waveform on top of the canvas's
+    // own partial GU commit; layout/overlay/tray changes use full-color NORMAL (GU).
+    val heavyChromeKey = listOf(ghost, pipExpanded, pipCollapsed, showAllColors, confirmReset, message)
+    val lightChromeKey = listOf(tool, brush, color, stayInside, stylusOnly, zoomLabel)
     var chromeMounted by remember(s) { mutableStateOf(false) }
-    LaunchedEffect(s, chromeKey) {
+    var lastHeavyChromeKey by remember(s) { mutableStateOf(heavyChromeKey) }
+    LaunchedEffect(s, heavyChromeKey, lightChromeKey) {
         if (!chromeMounted) {
             chromeMounted = true
+            lastHeavyChromeKey = heavyChromeKey
             OnyxEinkBridge.setViewDefaultMode(rootView, EinkMode.NORMAL)
             OnyxEinkBridge.refreshHostUi(rootView, EinkMode.NORMAL)
             return@LaunchedEffect
         }
+        val mode = if (heavyChromeKey != lastHeavyChromeKey) EinkMode.NORMAL else EinkMode.FAST
+        lastHeavyChromeKey = heavyChromeKey
         val view = canvasView
         if (view != null && !view.isReleased) {
-            view.notifyChromeUiChanged(rootView)
+            view.notifyChromeUiChanged(rootView, mode)
         } else {
-            OnyxEinkBridge.refreshHostUi(rootView, EinkMode.NORMAL)
+            OnyxEinkBridge.refreshHostUi(rootView, mode)
         }
     }
 

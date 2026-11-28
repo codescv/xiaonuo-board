@@ -139,6 +139,7 @@ class ColoringCanvasView(
     private var lastFastBlitUptimeMs = 0L
     private var pendingArmRawAfterInteraction = false
     private var pendingChromeRefreshHost: View? = null
+    private var pendingChromeRefreshMode: EinkMode = EinkMode.NORMAL
     private val flushRefresh = Runnable { flushPendingRefresh() }
     private val armRawSurface = Runnable { armRawSurfaceNow() }
 
@@ -412,13 +413,21 @@ class ColoringCanvasView(
      * Deferred while a stroke or pinch/pan gesture is in flight so live strokes and zoom never stutter.
      * Never called during continuous canvas coloring — zero impact on handwriting speed.
      */
-    fun notifyChromeUiChanged(hostView: View) {
+    fun notifyChromeUiChanged(hostView: View, mode: EinkMode = EinkMode.NORMAL) {
         if (!initDone || !OnyxEinkBridge.isAvailable) return
         if (hwPreview || stroking || fingerVisual) {
+            pendingChromeRefreshMode = if (pendingChromeRefreshHost == null) {
+                mode
+            } else if (mode == EinkMode.NORMAL) {
+                EinkMode.NORMAL
+            } else {
+                pendingChromeRefreshMode
+            }
             pendingChromeRefreshHost = hostView
             return
         }
         pendingChromeRefreshHost = null
+        pendingChromeRefreshMode = EinkMode.FAST
         val hadBurst = !penBurst.isEmpty
         val wasLive = raw.isOpen && raw.isEnabled && raw.isRenderEnabled
         if (wasLive) {
@@ -427,9 +436,9 @@ class ColoringCanvasView(
         if (hadBurst && surfaceValid && !paintLayer.isReleased) {
             flushPenBurst()
         }
-        OnyxEinkBridge.refreshHostUi(hostView, EinkMode.NORMAL)
+        OnyxEinkBridge.refreshHostUi(hostView, mode)
         OnyxEinkBridge.enablePost(this, 1)
-        DiagLog.log(DiagLog.DRAW) { "chromeRefresh wasLive=$wasLive hadBurst=$hadBurst rawOpen=${raw.isOpen}" }
+        DiagLog.log(DiagLog.DRAW) { "chromeRefresh mode=${mode.name} wasLive=$wasLive hadBurst=$hadBurst rawOpen=${raw.isOpen}" }
         if (raw.isOpen && raw.isEnabled && !raw.isRenderEnabled) {
             raw.schedulePenLayerResume()
         } else if (!raw.isOpen && surfaceValid && OnyxEinkBridge.isTouchHelperAvailable) {
@@ -452,7 +461,7 @@ class ColoringCanvasView(
     private fun flushPendingChromeRefresh() {
         val host = pendingChromeRefreshHost ?: return
         if (hwPreview || stroking || fingerVisual) return
-        notifyChromeUiChanged(host)
+        notifyChromeUiChanged(host, pendingChromeRefreshMode)
     }
 
     fun clearGhosting(hostView: View? = null) {
