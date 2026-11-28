@@ -131,7 +131,9 @@ class ColoringCanvasView(
     private var flushScheduled = false
     private var pendingTransformRedraw = false
     private var lastFastBlitUptimeMs = 0L
+    private var pendingArmRawAfterInteraction = false
     private val flushRefresh = Runnable { flushPendingRefresh() }
+    private val armRawSurface = Runnable { armRawSurfaceNow() }
 
     // Hardware pen trace bookkeeping (view px): the trace is NOT region-clipped and may extend past
     // the painted rect (不涂出线) or the canvas image, so its own bounds are refreshed with the burst.
@@ -275,6 +277,7 @@ class ColoringCanvasView(
                     onStrokeFinished?.invoke()
                 }
                 onStrokeEnded?.invoke()
+                maybeReschedulePendingRawArm()
             }
 
             override fun onFilled(rect: DirtyRect) {
@@ -435,6 +438,8 @@ class ColoringCanvasView(
     /** Releases the display tiles and TouchHelper; call once the view has left the window. */
     fun release() {
         holder.removeCallback(this)
+        removeCallbacks(armRawSurface)
+        pendingArmRawAfterInteraction = false
         surfaceValid = false
         surfaceRenderedOnce = false
         lastRenderedW = 0
@@ -445,6 +450,35 @@ class ColoringCanvasView(
         controller.onDirty = null
         clearPendingRefresh()
         paintLayer.release()
+    }
+
+    // ---------------- SurfaceView hole-punch clipping (API ≤ 30) ----------------
+
+    /**
+     * Defense-in-depth alongside `Modifier.clipToBounds()` on the Compose `AndroidView`: on API ≤ 30
+     * (Android 11 / BOOX Nova Air C), `SurfaceView.clearSurfaceViewPort` punches its hole with an
+     * unbounded `canvas.drawColor(0, PorterDuff.Mode.CLEAR)`. Clipping to our own bounds guarantees
+     * the CLEAR punch-hole can never erase sibling Compose UI (top toolbar / brush row) drawn
+     * earlier in the same window frame.
+     */
+    override fun draw(canvas: Canvas) {
+        val save = canvas.save()
+        canvas.clipRect(0, 0, width, height)
+        try {
+            super.draw(canvas)
+        } finally {
+            canvas.restoreToCount(save)
+        }
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        val save = canvas.save()
+        canvas.clipRect(0, 0, width, height)
+        try {
+            super.dispatchDraw(canvas)
+        } finally {
+            canvas.restoreToCount(save)
+        }
     }
 
     // ---------------- SurfaceHolder.Callback ----------------
@@ -461,8 +495,10 @@ class ColoringCanvasView(
         val resized = width != lastRenderedW || height != lastRenderedH
         updateViewSize(width, height)
         OnyxEinkBridge.enablePost(this, 1)
-        raw.setSurfaceValid(true)
-        syncRawBounds()
+        if (raw.isOpen) {
+            raw.setSurfaceValid(true)
+            syncRawBounds()
+        }
         if (!surfaceRenderedOnce || resized) {
             // Clear stale burst / partial refresh work superseded by the full-surface redraw.
             penBurst.clear()
@@ -470,9 +506,11 @@ class ColoringCanvasView(
             removeCallbacks(flushRefresh)
             flushScheduled = false
             pendingTransformRedraw = false
-            // Keep PEN_DRAWING paused while the initial page (or Compose palette/PiP resize)
-            // finishes its NORMAL refresh on the EPD, then resume after penResumeDelayMs.
-            raw.hidePenLayer()
+            if (raw.isOpen) {
+                // Keep PEN_DRAWING paused while the Compose palette/PiP resize finishes its
+                // NORMAL refresh on the EPD, then resume after penResumeDelayMs.
+                raw.hidePenLayer()
+            }
             var rendered = false
             OnyxEinkBridge.withForcedPost(this, EinkMode.NORMAL, forceUnfreeze = raw.isOpen) {
                 rendered = renderToSurface(null)
@@ -482,13 +520,26 @@ class ColoringCanvasView(
                 lastRenderedW = width
                 lastRenderedH = height
             }
-            raw.schedulePenLayerResume()
+            if (raw.isOpen) {
+                raw.schedulePenLayerResume()
+            } else {
+                // Let the initial Compose top toolbar / palette frame and NORMAL EPD refresh
+                // settle before opening TouchHelper (which enters PEN_DRAWING and freezes window
+                // updates). Any early stroke during this window draws via ANIMATION_QUALITY.
+                scheduleInitialRawArm()
+            }
+        } else if (!raw.isOpen) {
+            scheduleInitialRawArm()
         }
-        DiagLog.log(DiagLog.CANVAS) { "surfaceChanged ${width}x$height resized=$resized rendered=$surfaceRenderedOnce" }
+        DiagLog.log(DiagLog.CANVAS) {
+            "surfaceChanged ${width}x$height resized=$resized rendered=$surfaceRenderedOnce rawOpen=${raw.isOpen}"
+        }
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         DiagLog.log(DiagLog.CANVAS, "surfaceDestroyed")
+        removeCallbacks(armRawSurface)
+        pendingArmRawAfterInteraction = false
         surfaceValid = false
         surfaceRenderedOnce = false
         lastRenderedW = 0
@@ -497,6 +548,37 @@ class ColoringCanvasView(
         OnyxEinkBridge.exitFastStroke(refresh = false)
         abortActiveStroke()
         clearPendingRefresh()
+    }
+
+    private fun scheduleInitialRawArm() {
+        removeCallbacks(armRawSurface)
+        pendingArmRawAfterInteraction = false
+        if (!OnyxEinkBridge.isTouchHelperAvailable) {
+            syncRawBounds()
+            raw.setSurfaceValid(true)
+            return
+        }
+        postDelayed(armRawSurface, OnyxEinkBridge.penResumeDelayMs)
+    }
+
+    private fun armRawSurfaceNow() {
+        if (!surfaceValid || paintLayer.isReleased) return
+        if (stroking || fingerVisual) {
+            pendingArmRawAfterInteraction = true
+            return
+        }
+        pendingArmRawAfterInteraction = false
+        syncRawBounds()
+        raw.setSurfaceValid(true)
+    }
+
+    private fun maybeReschedulePendingRawArm() {
+        if (!pendingArmRawAfterInteraction || stroking || fingerVisual) return
+        pendingArmRawAfterInteraction = false
+        if (surfaceValid && !paintLayer.isReleased && !raw.isOpen) {
+            removeCallbacks(armRawSurface)
+            postDelayed(armRawSurface, OnyxEinkBridge.penResumeDelayMs)
+        }
     }
 
     // ---------------- View lifecycle ----------------
@@ -513,6 +595,8 @@ class ColoringCanvasView(
 
     override fun onDetachedFromWindow() {
         DiagLog.log(DiagLog.CANVAS, "detached")
+        removeCallbacks(armRawSurface)
+        pendingArmRawAfterInteraction = false
         viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
         raw.setAttached(false)
         OnyxEinkBridge.exitFastStroke(refresh = false)
@@ -723,6 +807,7 @@ class ColoringCanvasView(
             OnyxEinkBridge.withForcedPost(this, EinkMode.NORMAL, forceUnfreeze = raw.isOpen) { renderToSurface(null) }
         }
         raw.setFingerGesture(false)
+        maybeReschedulePendingRawArm()
     }
 
     /**

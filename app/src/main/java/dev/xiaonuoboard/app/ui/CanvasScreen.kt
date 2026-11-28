@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect as UiRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -43,6 +44,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +57,8 @@ import dev.xiaonuoboard.app.data.BitmapIO
 import dev.xiaonuoboard.app.data.ColoringPage
 import dev.xiaonuoboard.app.data.GalleryExporter
 import dev.xiaonuoboard.app.eink.DiagLog
+import dev.xiaonuoboard.app.eink.EinkMode
+import dev.xiaonuoboard.app.eink.OnyxEinkBridge
 import dev.xiaonuoboard.app.engine.BrushSize
 import dev.xiaonuoboard.app.engine.ColoringCanvasController
 import dev.xiaonuoboard.app.engine.KaleidoPalette
@@ -122,6 +126,15 @@ fun CanvasScreen(
     }
 
     val controller = s.controller
+    val rootView = LocalView.current
+    // Once loadSession finishes (replacing the "加载中..." placeholder with the real toolbars +
+    // SurfaceView), issue one NORMAL (GU) refresh on the Compose host so the top toolbar, brush
+    // row, PiP and palette paint cleanly on BOOX EPD before TouchHelper arms raw drawing.
+    LaunchedEffect(s) {
+        OnyxEinkBridge.enablePost(rootView, 1)
+        OnyxEinkBridge.setViewDefaultMode(rootView, EinkMode.NORMAL)
+        OnyxEinkBridge.refresh(rootView, EinkMode.NORMAL)
+    }
     // Every background job that reads session bitmaps; they are recycled only after all have finished.
     val ioJobs = remember(pageId) { JobTracker() }
     var currentArtworkId by remember(pageId) { mutableStateOf(initialArtworkId) }
@@ -374,7 +387,12 @@ fun CanvasScreen(
         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AndroidView(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    // Before API 31 (BOOX Nova Air C runs Android 11 / API 30), SurfaceView
+                    // punches its hole with an unbounded canvas.drawColor(0, PorterDuff.Mode.CLEAR).
+                    // Compose's AndroidViewsHandler disables clipChildren, so without clipToBounds()
+                    // that CLEAR erases everything drawn earlier in the window (the top toolbar and
+                    // brush row). Mirrors androidx.media3.ui.compose.PlayerSurface.
+                    modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds(),
                     factory = { ctx ->
                         // Saved paint is already loaded into the controller's buffer.
                         ColoringCanvasView(ctx, controller, s.lineOverlay).also { v ->

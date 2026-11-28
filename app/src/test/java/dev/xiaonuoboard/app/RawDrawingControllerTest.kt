@@ -776,6 +776,33 @@ class RawDrawingControllerTest {
     }
 
     @Test
+    fun deferredSurfaceArmingStaysDisabledWhenSuspendedOrBucketTool() {
+        val r = Rig(requireSurface = true)
+        r.c.setStroke(12f, 0xFFFF0000.toInt())
+        r.c.setWindowFocused(true)
+        r.c.setVisible(true)
+        r.c.setAttached(true)
+        r.c.setBounds(limit, emptyList(), 0, 100)
+        // Before deferred arm fires, TouchHelper is neither opened nor enabled (toolbar can draw).
+        assertFalse(r.c.isOpen)
+        assertEquals(0, r.backend.opens)
+
+        // If user opened an overlay (confirmReset / expanded PiP) before the initial settle finishes,
+        // arming opens TouchHelper in disabled state without entering PEN_DRAWING.
+        r.c.setToolAllowsRaw(true)
+        r.c.setSuspended(true)
+        r.c.setSurfaceValid(true)
+        assertTrue(r.c.isOpen)
+        assertFalse("must stay disabled while suspended", r.c.isEnabled)
+        assertFalse(r.c.isRenderEnabled)
+
+        // Closing the overlay enables raw drawing cleanly.
+        r.c.setSuspended(false)
+        assertTrue(r.c.isEnabled)
+        assertTrue(r.c.isRenderEnabled)
+    }
+
+    @Test
     fun suppressedStylusMotionEventsStillTriggerThreeMissSelfHealing() {
         val r = Rig().armed()
         // 2 missed strokes + 1 cancelled stroke → still open.
